@@ -373,7 +373,7 @@ export default function HomePage() {
         {/* Search box */}
         {!isAnalyzing && activeSubTab === 'search' && (
           <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-            <div className="flex gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <input
                 suppressHydrationWarning
                 type="text"
@@ -386,7 +386,7 @@ export default function HomePage() {
               <button
                 onClick={handleAnalyze}
                 disabled={!company.trim()}
-                className="px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="w-full sm:w-auto px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Analyze
               </button>

@@ -80,6 +80,10 @@ export default function RAGIngestionCard() {
         try {
             const response = await fetch('/api/ingest', { method: 'POST', body: formData })
 
+            if (response.status === 429) {
+                throw new Error('Rate Limit Exceeded (429): Too many requests to the AI services. Please wait 1-2 minutes and try again.')
+            }
+
             if (!response.ok || !response.body) {
                 const errData = await response.json().catch(() => ({ error: 'Upload failed' }))
                 throw new Error(errData.error || 'Failed to ingest document')
@@ -107,7 +111,15 @@ export default function RAGIngestionCard() {
                             if (payload.message) setStatusText(payload.message)
                             if (payload.percent) setProgressPercent(payload.percent)
                             if (payload.stats) setStats(payload.stats)
-                            if (payload.error) { setStatus('error'); setErrorMsg(payload.error); return }
+                            if (payload.error) {
+                                setStatus('error');
+                                const isRateLimit = payload.error.includes('429') || payload.error.toLowerCase().includes('rate limit') || payload.error.toLowerCase().includes('too many requests');
+                                setErrorMsg(isRateLimit 
+                                    ? 'Rate Limit Exceeded (429): The AI services (Google Gemini or Groq) are receiving too many requests. Please wait a minute and try again.' 
+                                    : payload.error
+                                );
+                                return;
+                            }
                             if (payload.success) { setStatus('success') }
                         } catch { /* skip malformed lines */ }
                     }
@@ -117,7 +129,11 @@ export default function RAGIngestionCard() {
             if (status !== 'error') setStatus('success')
         } catch (err: any) {
             setStatus('error')
-            setErrorMsg(err.message || 'An error occurred during ingestion.')
+            const isRateLimit = err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit') || err.message?.toLowerCase().includes('too many requests');
+            setErrorMsg(isRateLimit 
+                ? 'Rate Limit Exceeded (429): The API quotas were reached. Please wait a minute before retrying document ingestion.' 
+                : (err.message || 'An error occurred during ingestion.')
+            )
         }
     }
 
@@ -129,12 +145,19 @@ export default function RAGIngestionCard() {
 
         try {
             const res = await fetch(`/api/edgar?ticker=${encodeURIComponent(edgarTicker.trim())}&type=${edgarFormType}`)
+            if (res.status === 429) {
+                throw new Error('Rate Limit Exceeded (429): Too many requests to the SEC services. Please wait 1-2 minutes and try again.')
+            }
             if (!res.ok) throw new Error('EDGAR search failed')
             const data = await res.json()
             setEdgarFilings(data.filings ?? [])
             if (data.filings?.length === 0) setErrorMsg(`No ${edgarFormType} filings found for "${edgarTicker}" on SEC EDGAR.`)
         } catch (err: any) {
-            setErrorMsg(err.message)
+            const isRateLimit = err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit') || err.message?.toLowerCase().includes('too many requests');
+            setErrorMsg(isRateLimit 
+                ? 'Rate Limit Exceeded (429): The API quotas were reached. Please wait a minute before retrying.' 
+                : err.message
+            )
         } finally { setEdgarLoading(false) }
     }
 
@@ -156,6 +179,10 @@ export default function RAGIngestionCard() {
                     formType: filing.form,
                 }),
             })
+
+            if (res.status === 429) {
+                throw new Error('Rate Limit Exceeded (429): Too many requests to the SEC/AI services. Please wait 1-2 minutes and try again.')
+            }
 
             if (!res.ok || !res.body) throw new Error('EDGAR ingestion failed')
 
@@ -179,7 +206,15 @@ export default function RAGIngestionCard() {
                             const payload = JSON.parse(jsonStr)
                             if (payload.message) setStatusText(payload.message)
                             if (payload.stats) setStats(payload.stats)
-                            if (payload.error) { setStatus('error'); setErrorMsg(payload.error); return }
+                            if (payload.error) {
+                                setStatus('error');
+                                const isRateLimit = payload.error.includes('429') || payload.error.toLowerCase().includes('rate limit') || payload.error.toLowerCase().includes('too many requests');
+                                setErrorMsg(isRateLimit 
+                                    ? 'Rate Limit Exceeded (429): The AI services are receiving too many requests. Please wait a minute and try again.' 
+                                    : payload.error
+                                );
+                                return;
+                            }
                             if (payload.success) { setStatus('success'); setStatusText(payload.message || 'Done!') }
                         } catch { /* skip */ }
                     }
@@ -189,7 +224,11 @@ export default function RAGIngestionCard() {
             if (status !== 'error') setStatus('success')
         } catch (err: any) {
             setStatus('error')
-            setErrorMsg(err.message)
+            const isRateLimit = err.message?.includes('429') || err.message?.toLowerCase().includes('rate limit') || err.message?.toLowerCase().includes('too many requests');
+            setErrorMsg(isRateLimit 
+                ? 'Rate Limit Exceeded (429): The API quotas were reached. Please wait a minute before retrying document ingestion.' 
+                : err.message
+            )
         }
     }
 

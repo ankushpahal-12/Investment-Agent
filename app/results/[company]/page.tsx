@@ -646,7 +646,7 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                         {/* Header bar */}
                         <div
                             onClick={() => setOpenIndex(isCardOpen ? null : index)}
-                            className={`px-4 py-2.5 flex items-center justify-between border-b cursor-pointer sm:cursor-default select-none ${
+                            className={`px-4 py-2.5 flex items-center justify-between border-b cursor-pointer select-none ${
                                 isFootnote ? 'bg-purple-50/30 border-purple-100/50' :
                                 isTable ? 'bg-blue-50/30 border-blue-100/50' : 'bg-gray-50 border-gray-100'
                             }`}
@@ -663,8 +663,8 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                                     {isTable ? 'Table' : isFootnote ? 'Footnote' : 'Text'}
                                 </span>
                                 
-                                {/* Collapsible arrow indicators for mobile version */}
-                                <span className="sm:hidden text-gray-500">
+                                {/* Collapsible arrow indicators */}
+                                <span className="text-gray-500 flex-shrink-0">
                                     {isCardOpen ? (
                                         // Arrow down for closing (when open)
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5">
@@ -680,8 +680,8 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                             </div>
                         </div>
 
-                        {/* Content area - on desktop always visible, on mobile conditionally visible */}
-                        <div className={`p-4 sm:block ${isCardOpen ? 'block' : 'hidden'}`}>
+                        {/* Content area - conditionally visible based on open state */}
+                        <div className={`p-4 ${isCardOpen ? 'block' : 'hidden'}`}>
                             {isTable ? (
                                 <pre className="text-xs text-gray-700 bg-gray-50 p-3 rounded-lg overflow-x-auto whitespace-pre font-mono leading-relaxed max-h-[300px]">
                                     {displayContent}
