@@ -4,19 +4,19 @@ StockSage is a state-of-the-art investment research platform that automates comp
 
 ---
 
-## 🗺️ Documentation Directory
+##  Documentation Directory
 
 For deep-dive topics, please refer to the modular developer guides created in the [docs](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs) folder:
 
-- **[🚀 Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md)**: Onboarding instructions, environment configurations, dependencies, and vector database setups.
-- **[🏛️ System Architecture](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/architecture.md)**: Technology stack breakdown, folder layouts, system flowcharts, and MongoDB database schemas.
-- **[⚙️ How It Works (Pipeline & Agents)](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/how-it-works.md)**: Detailed examination of the LangGraph state machine, individual agent prompts/models, and the multi-query RAG semantic retrieval engine.
-- **[🌟 Core & Upgraded Features](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/features.md)**: In-depth reviews of the 7-feature robustness upgrades (RAG auditor, validation agent, SSE streams, SEC crawler, rate-limiter, PDF generator, and trends).
-- **[🔧 Troubleshooting & Error Resolution](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/troubleshooting.md)**: Developer guide for resolving API rate limits, database timeouts, SEC crawling blocks, and ChromaDB fallbacks.
+- **[Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md)**: Onboarding instructions, environment configurations, dependencies, and vector database setups.
+- **[System Architecture](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/architecture.md)**: Technology stack breakdown, folder layouts, system flowcharts, and MongoDB database schemas.
+- **[How It Works (Pipeline & Agents)](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/how-it-works.md)**: Detailed examination of the LangGraph state machine, individual agent prompts/models, and the multi-query RAG semantic retrieval engine.
+- **[Core & Upgraded Features](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/features.md)**: In-depth reviews of the 7-feature robustness upgrades (RAG auditor, validation agent, SSE streams, SEC crawler, rate-limiter, PDF generator, and trends).
+- **[Troubleshooting & Error Resolution](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/troubleshooting.md)**: Developer guide for resolving API rate limits, database timeouts, SEC crawling blocks, and ChromaDB fallbacks.
 
 ---
 
-## 🧠 The Multi-Agent Orchestrator
+## The Multi-Agent Orchestrator
 
 StockSage models the investment research process as a stateful directed graph. Instead of a single LLM trying to synthesize diverse financial dimensions, the platform delegates tasks to a network of specialized agent nodes powered by `llama-3.3-70b-versatile` (via Groq) that write to a shared, thread-safe state.
 
@@ -72,7 +72,7 @@ StockSage models the investment research process as a stateful directed graph. I
 
 ---
 
-## ⚡ Quick Start (60-Second Setup)
+## Quick Start (60-Second Setup)
 
 For full setup details, refer to the [Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md). Here is the rapid command sequence to get the platform running locally:
 
