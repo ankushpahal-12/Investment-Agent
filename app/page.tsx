@@ -107,6 +107,7 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [recent, setRecent] = useState<RecentReport[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false)
   const [activeSubTab, setActiveSubTab] = useState<'search' | 'ingest'>('search')
 
   useEffect(() => {
@@ -579,6 +580,146 @@ export default function HomePage() {
         )}
 
       </div>
+
+      {/* Trigger Button: How does it work */}
+      <button
+        onClick={() => setHowItWorksOpen(true)}
+        className="fixed bottom-6 left-6 z-40 bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 rounded-full px-4 py-2.5 flex items-center gap-2 cursor-pointer transition-all duration-200 group text-sm text-gray-700 font-medium"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+          className="w-5 h-5 text-gray-500 group-hover:text-gray-700 transition-colors"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
+          />
+        </svg>
+        <span>How does it work</span>
+      </button>
+
+      {/* How It Works Modal */}
+      {howItWorksOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop blur overlay */}
+          <div
+            className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setHowItWorksOpen(false)}
+          />
+
+          {/* Modal Container */}
+          <div className="bg-white rounded-2xl shadow-2xl w-[96vw] max-w-none h-[92vh] max-h-none flex flex-col overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200 border border-gray-100">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">How StockSage Works</h2>
+              <button
+                onClick={() => setHowItWorksOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 cursor-pointer"
+                aria-label="Close modal"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-600">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">1. Selecting and Querying (What to Select & Type)</h3>
+                <p className="mb-3">StockSage has two primary sections on the main page. Choose one based on your goal:</p>
+                <ul className="list-disc pl-5 space-y-2.5">
+                  <li>
+                    <strong>Stock Analysis Tab:</strong>
+                    <ul className="list-circle pl-5 mt-1 space-y-1">
+                      <li><strong>What to Select:</strong> Make sure the "Stock Analysis" sub-tab is active.</li>
+                      <li><strong>What to Type:</strong> Click in the search field and type a complete company name or stock ticker symbol (for example, type <span className="font-mono text-gray-800 bg-gray-100 px-1 py-0.5 rounded">Apple</span>, <span className="font-mono text-gray-800 bg-gray-100 px-1 py-0.5 rounded">AAPL</span>, <span className="font-mono text-gray-800 bg-gray-100 px-1 py-0.5 rounded">Infosys</span>, or <span className="font-mono text-gray-800 bg-gray-100 px-1 py-0.5 rounded">TSLA</span>).</li>
+                      <li><strong>Action:</strong> Click the <strong>Analyze</strong> button or press the <span className="font-mono text-gray-800 bg-gray-100 px-1 py-0.5 rounded">Enter</span> key to run the pipeline.</li>
+                    </ul>
+                  </li>
+                  <li>
+                    <strong>Knowledge Base Ingestion Tab:</strong>
+                    <ul className="list-circle pl-5 mt-1 space-y-1">
+                      <li><strong>What to Select:</strong> Switch to the "Knowledge Base Ingestion" sub-tab.</li>
+                      <li><strong>Manual PDF Ingest:</strong> Select "Upload PDF" to manually drag and drop or browse for files. Type the associated company name exactly so the RAG agent maps documents properly.</li>
+                      <li><strong>Auto-Fetch Filing:</strong> Select "Auto-fetch from SEC EDGAR" to query regulatory filings. Type a company ticker, select a document (10-K or 10-Q), and click fetch to retrieve and index the filing.</li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">2. The Multi-Agent Pipeline (How Each Agent Works)</h3>
+                <p className="mb-3">When you launch an analysis, StockSage runs a sequential LangGraph workflow. The progress bar updates as each specialized agent completes its analysis:</p>
+                <ol className="list-decimal pl-5 space-y-3">
+                  <li>
+                    <strong>Validation Agent:</strong> Evaluates your input string to ensure it resolves to a real, actively traded stock symbol via Finnhub. If it fails, the pipeline terminates immediately to protect API limits.
+                  </li>
+                  <li>
+                    <strong>Research Agent:</strong> Pulls general corporate attributes (including CEO identity, headquarters location, founding year, key product segments, and direct competitors) using Tavily Search and Wikipedia.
+                  </li>
+                  <li>
+                    <strong>Financial Agent:</strong> Gathers key fundamental numbers from stock market APIs, including EV/EBITDA, P/E ratios, profit margins, YoY revenue growth rates, debt leverage, and consensus analyst price targets.
+                  </li>
+                  <li>
+                    <strong>News Agent:</strong> Crawls global news databases covering stories published over the last seven days, using the LLM to score net sentiment metrics and highlight catalyst events.
+                  </li>
+                  <li>
+                    <strong>RAG Retrieval Node:</strong> Performs semantic search lookups against vector indexes stored in Chroma Cloud. It pulls details about legal proceedings, debt covenants, and geographic segment performance.
+                  </li>
+                  <li>
+                    <strong>Risk Agent:</strong> Synthesizes data to assess systemic business, industry, and credit risks, compiling comprehensive bull-case and bear-case scenarios.
+                  </li>
+                  <li>
+                    <strong>Decision Agent:</strong> Merges all agent outputs, determines the final recommendation (INVEST or PASS), assigns a confidence score, and establishes a 12-month target price.
+                  </li>
+                </ol>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">3. Viewing and Exporting Results</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>
+                    <strong>Dashboard:</strong> After compilation, the application redirects to the Results Dashboard. Browse the structured tabs (Overview, Sentiment, Financials, Risks, RAG, and Trend) to audit the agents' reasoning.
+                  </li>
+                  <li>
+                    <strong>RAG Quality Auditor:</strong> Look at the color-coded RAG badge on the top right of the result page to verify how many vector chunks, tables, and footnotes were retrieved from the SEC filings.
+                  </li>
+                  <li>
+                    <strong>Exporting reports:</strong> Click the <strong>Export PDF</strong> button at the top of the dashboard. This generates a styled investment memo and launches the system printer dialog to save it directly to your device.
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setHowItWorksOpen(false)}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                Got it, thanks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
