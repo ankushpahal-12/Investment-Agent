@@ -584,6 +584,8 @@ function DecisionTab({ verdict }: { verdict: Verdict }) {
 }
 
 function SecSourcesTab({ ragContext }: { ragContext?: string }) {
+    const [openIndex, setOpenIndex] = useState<number | null>(0); // First card open by default
+
     if (!ragContext || ragContext.trim() === 'No additional context retrieved.' || ragContext.trim().length === 0) {
         return (
             <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
@@ -632,6 +634,8 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                     badgeColor = 'purple'
                 }
 
+                const isCardOpen = openIndex === index;
+
                 return (
                     <div
                         key={index}
@@ -641,7 +645,8 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                     >
                         {/* Header bar */}
                         <div
-                            className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                            onClick={() => setOpenIndex(isCardOpen ? null : index)}
+                            className={`px-4 py-2.5 flex items-center justify-between border-b cursor-pointer sm:cursor-default select-none ${
                                 isFootnote ? 'bg-purple-50/30 border-purple-100/50' :
                                 isTable ? 'bg-blue-50/30 border-blue-100/50' : 'bg-gray-50 border-gray-100'
                             }`}
@@ -650,16 +655,33 @@ function SecSourcesTab({ ragContext }: { ragContext?: string }) {
                                 <span className="text-sm">{icon}</span>
                                 <span className="text-xs font-medium text-gray-800">{title}</span>
                             </div>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                                badgeColor === 'blue' ? 'bg-blue-50 text-blue-700' :
-                                badgeColor === 'purple' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-600'
-                            }`}>
-                                {isTable ? 'Table' : isFootnote ? 'Footnote' : 'Text'}
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                    badgeColor === 'blue' ? 'bg-blue-50 text-blue-700' :
+                                    badgeColor === 'purple' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                    {isTable ? 'Table' : isFootnote ? 'Footnote' : 'Text'}
+                                </span>
+                                
+                                {/* Collapsible arrow indicators for mobile version */}
+                                <span className="sm:hidden text-gray-500">
+                                    {isCardOpen ? (
+                                        // Arrow down for closing (when open)
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                        </svg>
+                                    ) : (
+                                        // Arrow up for opening (when closed)
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                        </svg>
+                                    )}
+                                </span>
+                            </div>
                         </div>
 
-                        {/* Content area */}
-                        <div className="p-4">
+                        {/* Content area - on desktop always visible, on mobile conditionally visible */}
+                        <div className={`p-4 sm:block ${isCardOpen ? 'block' : 'hidden'}`}>
                             {isTable ? (
                                 <pre className="text-xs text-gray-700 bg-gray-50 p-3 rounded-lg overflow-x-auto whitespace-pre font-mono leading-relaxed max-h-[300px]">
                                     {displayContent}
@@ -1175,44 +1197,19 @@ export default function ResultsPage() {
                             </div>
                         </div>
 
-                        {/* Navigation / Sidebar Tabs */}
-                        <div className="hidden lg:flex bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex-col gap-1">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-3 py-2">
-                                Analysis Sections
-                            </p>
-                            {TABS.map(tab => (
-                                <button
-                                    key={tab}
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`
-                                        w-full text-left text-sm px-4 py-2.5 rounded-lg transition-all font-medium flex items-center justify-between cursor-pointer
-                                        ${activeTab === tab
-                                            ? 'bg-gray-900 text-white shadow-sm font-semibold'
-                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-                                    `}
-                                >
-                                    <span>{tab}</span>
-                                    {activeTab === tab ? (
-                                        <span className="text-white text-xs">●</span>
-                                    ) : (
-                                        <span className="text-gray-300 hover:text-gray-400">→</span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
                     </div>
 
                     {/* Right Column - Tab Content Details */}
                     <div className="lg:col-span-7 space-y-4">
                         
-                        {/* Horizontal Tab navigation for mobile screen widths */}
-                        <div className="lg:hidden bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm overflow-x-auto whitespace-nowrap flex gap-1 scrollbar-none">
+                        {/* Horizontal Tab navigation for all screen widths */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-2 shadow-sm flex flex-wrap gap-1.5 mb-4">
                             {TABS.map(tab => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
                                     className={`
-                                        text-xs px-3.5 py-2 rounded-lg font-medium transition-all flex-shrink-0 cursor-pointer
+                                        text-xs px-3.5 py-2 rounded-lg font-medium transition-all cursor-pointer
                                         ${activeTab === tab
                                             ? 'bg-gray-900 text-white shadow-sm font-semibold'
                                             : 'text-gray-600 hover:bg-gray-50'}
