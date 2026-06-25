@@ -1,65 +1,584 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import HistoryModal from '@/components/HistoryModal'
+import RAGIngestionCard from '@/components/RAGIngestionCard'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface RecentReport {
+  company: string
+  verdict: 'INVEST' | 'PASS'
+  analyzedAt: string
+  confidence: number
+}
+
+interface AgentFinding {
+  node: string
+  data: Record<string, unknown>
+  message: string
+}
+
+// ─── Agent steps ──────────────────────────────────────────────────────────────
+
+const AGENT_STEPS = [
+  { key: 'validation', label: 'Validation agent', desc: 'Verifying company name & resolving ticker' },
+  { key: 'research', label: 'Research agent', desc: 'Company overview, sector, leadership' },
+  { key: 'financial', label: 'Financial agent', desc: 'Share price, market cap, financials' },
+  { key: 'news', label: 'News agent', desc: 'Recent headlines and sentiment analysis' },
+  { key: 'risk', label: 'Risk agent', desc: 'Risks, opportunities, moat analysis' },
+  { key: 'decision', label: 'Decision agent', desc: 'Final INVEST / PASS verdict' },
+]
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+function getRecent(): RecentReport[] {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem('recent_reports') ?? '[]') }
+  catch { return [] }
+}
+
+function saveRecent(report: RecentReport) {
+  const updated = [report, ...getRecent().filter(r => r.company !== report.company)].slice(0, 5)
+  localStorage.setItem('recent_reports', JSON.stringify(updated))
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  const hrs = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  if (hrs < 24) return `${hrs}h ago`
+  return `${days}d ago`
+}
+
+// ─── Build live finding text per agent ───────────────────────────────────────
+
+function buildFinding(node: string, data: Record<string, unknown>): string {
+  switch (node) {
+    case 'research': {
+      const r = data.researchData as Record<string, unknown> | undefined
+      return r
+        ? `${r.sector ?? 'N/A'} · CEO: ${r.CEO ?? 'N/A'} · Founded: ${r.founded ?? 'N/A'}`
+        : 'Research complete'
+    }
+    case 'financial': {
+      const f = data.financialData as Record<string, unknown> | undefined
+      return f
+        ? `${f.ticker ?? 'N/A'} · ${f.currentPrice ?? 'N/A'} · Market cap: ${f.marketCap ?? 'N/A'} · P/E: ${f.peRatio ?? 'N/A'}`
+        : 'Financial data fetched'
+    }
+    case 'news': {
+      const n = data.newsData as Record<string, unknown> | undefined
+      return n
+        ? `Sentiment: ${n.sentiment ?? 'N/A'} (${n.sentimentScore ?? 0}/100)`
+        : 'News analyzed'
+    }
+    case 'risk': {
+      const r = data.riskData as Record<string, unknown> | undefined
+      return r
+        ? `Risk: ${r.riskLevel ?? 'N/A'} · Moat: ${r.moatStrength ?? 'N/A'}`
+        : 'Risk assessed'
+    }
+    case 'decision': {
+      const v = data.verdict as Record<string, unknown> | undefined
+      return v
+        ? `${v.decision ?? 'N/A'} · ${v.confidence ?? 0}% confidence · ${v.analystRating ?? 'N/A'}`
+        : 'Decision made'
+    }
+    default: return 'Complete'
+  }
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function HomePage() {
+  const router = useRouter()
+
+  const [company, setCompany] = useState('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [completedSteps, setCompletedSteps] = useState<string[]>([])
+  const [currentStep, setCurrentStep] = useState<string | null>(null)
+  const [liveFindings, setLiveFindings] = useState<Record<string, string>>({})
+  const [stepTimings, setStepTimings] = useState<Record<string, number>>({})
+  const [error, setError] = useState('')
+  const [recent, setRecent] = useState<RecentReport[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [activeSubTab, setActiveSubTab] = useState<'search' | 'ingest'>('search')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setRecent(getRecent())
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // ── Get step index from key ────────────────────────────────────────────────
+
+  function getStepIndex(key: string) {
+    return AGENT_STEPS.findIndex(s => s.key === key)
+  }
+
+  // ── Progress percent ───────────────────────────────────────────────────────
+
+  function getProgress(): number {
+    const done = completedSteps.length
+    const running = currentStep ? 0.5 : 0
+    return Math.round(((done + running) / AGENT_STEPS.length) * 100)
+  }
+
+  // ── Step status ────────────────────────────────────────────────────────────
+
+  function getStatus(key: string): 'done' | 'running' | 'queued' {
+    if (completedSteps.includes(key)) return 'done'
+    if (currentStep === key) return 'running'
+    return 'queued'
+  }
+
+  // ── Handle analyze with real SSE ───────────────────────────────────────────
+
+  async function handleAnalyze() {
+    if (!company.trim() || isAnalyzing) return
+
+    setError('')
+    setIsAnalyzing(true)
+    setCompletedSteps([])
+    setCurrentStep(null)
+    setLiveFindings({})
+    setStepTimings({})
+
+    const stepStartTime: Record<string, number> = {}
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: company.trim() }),
+      })
+
+      if (!res.ok || !res.body) {
+        throw new Error('API request failed')
+      }
+
+      // ── Read SSE stream ──────────────────────────────────────────────────
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          // Parse SSE format: "event: xxx" and "data: {...}"
+          if (line.startsWith('event:')) {
+            const eventName = line.replace('event:', '').trim()
+            const dataLine = lines[lines.indexOf(line) + 1] ?? ''
+            const jsonStr = dataLine.replace('data:', '').trim()
+
+            if (!jsonStr) continue
+
+            try {
+              const payload = JSON.parse(jsonStr)
+
+              if (eventName === 'start') {
+                // First agent starts running
+                setCurrentStep(AGENT_STEPS[0].key)
+                stepStartTime[AGENT_STEPS[0].key] = Date.now()
+              }
+
+              if (eventName === 'progress') {
+                const finding = payload as AgentFinding
+                const node = finding.node
+
+                // Mark this agent as DONE
+                const elapsed = Date.now() - (stepStartTime[node] ?? Date.now())
+                setStepTimings(prev => ({ ...prev, [node]: elapsed }))
+                setCompletedSteps(prev =>
+                  prev.includes(node) ? prev : [...prev, node]
+                )
+                setLiveFindings(prev => ({
+                  ...prev,
+                  [node]: buildFinding(node, finding.data),
+                }))
+
+                // Start NEXT agent
+                const nextIndex = getStepIndex(node) + 1
+                if (nextIndex < AGENT_STEPS.length) {
+                  const nextKey = AGENT_STEPS[nextIndex].key
+                  setCurrentStep(nextKey)
+                  stepStartTime[nextKey] = Date.now()
+                } else {
+                  setCurrentStep(null)
+                }
+              }
+
+              if (eventName === 'complete') {
+                // All done — mark everything complete
+                setCompletedSteps(AGENT_STEPS.map(s => s.key))
+                setCurrentStep(null)
+
+                // Save to recent
+                saveRecent({
+                  company: payload.company,
+                  verdict: payload.verdict?.decision ?? 'PASS',
+                  analyzedAt: new Date().toISOString(),
+                  confidence: payload.verdict?.confidence ?? 0,
+                })
+                setRecent(getRecent())
+
+                // Navigate to results
+                await new Promise(r => setTimeout(r, 800))
+                router.push(`/results/${encodeURIComponent(payload.company)}`)
+                return
+              }
+
+              if (eventName === 'error') {
+                throw new Error(payload.error ?? 'Analysis failed')
+              }
+
+            } catch {
+              // Skip malformed SSE lines
+              continue
+            }
+          }
+        }
+      }
+
+    } catch (err) {
+      setIsAnalyzing(false)
+      setCurrentStep(null)
+      setCompletedSteps([])
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') handleAnalyze()
+  }
+
+  // ── Delete recent item ─────────────────────────────────────────────────────
+  async function deleteRecent(company: string, e: React.MouseEvent) {
+    e.stopPropagation()  // prevent navigating to results
+
+    try {
+      // Remove from localStorage immediately
+      const updated = getRecent().filter(r => r.company !== company)
+      localStorage.setItem('recent_reports', JSON.stringify(updated))
+      setRecent(updated)
+
+      // Also delete from MongoDB
+      const all = await fetch('/api/history').then(r => r.json())
+      const report = (all.reports ?? []).find(
+        (r: { company: string; id: string }) =>
+          r.company.toLowerCase() === company.toLowerCase()
+      )
+
+      if (report?.id) {
+        await fetch('/api/history', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: report.id }),
+        })
+      }
+    } catch (err) {
+      console.warn('Delete failed:', err)
+    }
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="min-h-screen bg-gray-50">
+
+      {/* Topbar */}
+      <nav className="bg-white border-b border-gray-100 px-6 py-3 flex items-center">
+        <span className="text-sm font-medium text-gray-900">StockSage</span>
+        <div className="ml-auto flex items-center gap-4 text-sm text-gray-500">
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="cursor-pointer hover:text-gray-800 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            History
+          </button>
+          <span className="cursor-pointer hover:text-gray-800">About</span>
         </div>
-      </main>
-    </div>
-  );
+      </nav>
+
+      <HistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
+
+      <div className="max-w-2xl mx-auto px-4 py-12">
+
+        {/* Hero */}
+        {!isAnalyzing && (
+          <div className="text-center mb-10">
+            <h1 className="text-2xl font-medium text-gray-900 mb-2">
+              AI investment research
+            </h1>
+            <p className="text-sm text-gray-500">
+              Enter any company — get a full research report in seconds
+            </p>
+          </div>
+        )}
+
+        {/* Sub-tab Switcher */}
+        {!isAnalyzing && (
+          <div className="flex border-b border-gray-200 mb-8 justify-center gap-8">
+            <button
+              onClick={() => setActiveSubTab('search')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-all ${
+                activeSubTab === 'search'
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              🔍 Stock Analysis
+            </button>
+            <button
+              onClick={() => setActiveSubTab('ingest')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-all ${
+                activeSubTab === 'ingest'
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              📂 Knowledge Base Ingestion
+            </button>
+          </div>
+        )}
+
+        {/* Search box */}
+        {!isAnalyzing && activeSubTab === 'search' && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+            <div className="flex gap-3 mb-4">
+              <input
+                suppressHydrationWarning
+                type="text"
+                value={company}
+                onChange={e => setCompany(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search company name or ticker…"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              />
+              <button
+                onClick={handleAnalyze}
+                disabled={!company.trim()}
+                className="px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Analyze
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">Try:</span>
+              {['Infosys', 'Apple', 'Reliance', 'TCS', 'Tesla', 'Zomato'].map(name => (
+                <button
+                  suppressHydrationWarning
+                  key={name}
+                  onClick={() => setCompany(name)}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg">
+                <p className="text-sm text-red-700">
+                  <span className="font-medium">Error: </span>{error}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ingestion Card */}
+        {!isAnalyzing && activeSubTab === 'ingest' && (
+          <div className="mb-6">
+            <RAGIngestionCard />
+          </div>
+        )}
+
+        {/* Live agent tracker */}
+        {isAnalyzing && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Analyzing {company}…
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Each agent updates in real time below
+                </p>
+              </div>
+              <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium animate-pulse">
+                Live
+              </span>
+            </div>
+
+            {/* Agent rows */}
+            <div className="space-y-2 mb-5">
+              {AGENT_STEPS.map((step) => {
+                const status = getStatus(step.key)
+                const timing = stepTimings[step.key]
+                const finding = liveFindings[step.key]
+
+                return (
+                  <div
+                    key={step.key}
+                    className={`
+                      flex items-start gap-3 p-3 rounded-lg transition-all duration-500
+                      ${status === 'running' ? 'bg-blue-50 border border-blue-100' : ''}
+                      ${status === 'done' ? 'bg-green-50' : ''}
+                      ${status === 'queued' ? 'bg-gray-50' : ''}
+                    `}
+                  >
+                    {/* Status icon */}
+                    <div className={`
+                      w-7 h-7 rounded-full flex items-center justify-center
+                      text-xs flex-shrink-0 mt-0.5 font-medium transition-all
+                      ${status === 'done' ? 'bg-green-100 text-green-700' : ''}
+                      ${status === 'running' ? 'bg-blue-100  text-blue-700 animate-pulse' : ''}
+                      ${status === 'queued' ? 'bg-gray-100  text-gray-400' : ''}
+                    `}>
+                      {status === 'done' && '✓'}
+                      {status === 'running' && '⟳'}
+                      {status === 'queued' && String(getStepIndex(step.key) + 1)}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-sm font-medium ${status === 'queued' ? 'text-gray-400' : 'text-gray-900'}`}>
+                          {step.label}
+                        </p>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {timing && (
+                            <span className="text-xs text-gray-400">
+                              {(timing / 1000).toFixed(1)}s
+                            </span>
+                          )}
+                          {status === 'done' && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              Done
+                            </span>
+                          )}
+                          {status === 'running' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full animate-pulse">
+                              Running
+                            </span>
+                          )}
+                          {status === 'queued' && (
+                            <span className="text-xs text-gray-300">
+                              Queued
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className={`text-xs mt-0.5 truncate ${status === 'queued' ? 'text-gray-300' : 'text-gray-500'}`}>
+                        {finding ?? step.desc}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Real progress bar */}
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gray-900 rounded-full"
+                style={{
+                  width: `${getProgress()}%`,
+                  transition: 'width 0.6s ease-in-out',
+                }}
+              />
+            </div>
+            <div className="flex justify-between mt-1.5">
+              <p className="text-xs text-gray-400">
+                {currentStep && (
+                  <span className="text-blue-500">
+                    {AGENT_STEPS.find(s => s.key === currentStep)?.label} running…
+                  </span>
+                )}
+                {!currentStep && completedSteps.length > 0 && (
+                  <span className="text-green-600">All agents complete</span>
+                )}
+              </p>
+              <p className="text-xs text-gray-400">
+                {completedSteps.length}/{AGENT_STEPS.length} complete · {getProgress()}%
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Recent analyses */}
+        {!isAnalyzing && activeSubTab === 'search' && recent.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+              Recent analyses
+            </p>
+            <div className="space-y-2">
+              {recent.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors group"
+                >
+                  {/* Clickable area → goes to results */}
+                  <button
+                    onClick={() => router.push(`/results/${encodeURIComponent(r.company)}`)}
+                    className="flex-1 flex items-center justify-between text-left"
+                  >
+                    <span className="text-sm text-gray-900">{r.company}</span>
+                    <div className="flex items-center gap-3">
+                      <span className={`
+          text-xs font-medium px-2 py-0.5 rounded-full
+          ${r.verdict === 'INVEST'
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-red-50   text-red-700'}
+        `}>
+                        {r.verdict}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {timeAgo(r.analyzedAt)}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Delete button — visible on hover */}
+                  <button
+                    onClick={(e) => deleteRecent(r.company, e)}
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
+                    title="Remove from history"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isAnalyzing && activeSubTab === 'search' && recent.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-gray-400">
+              No recent analyses yet — search for a company above to get started.
+            </p>
+          </div>
+        )}
+
+      </div>
+    </main>
+  )
 }
