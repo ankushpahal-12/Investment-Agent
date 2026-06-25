@@ -77,10 +77,21 @@ async function tryGetChromaCollection() {
     try {
         const { ChromaClient } = await import('chromadb')
         const url = new URL(CHROMA_URL)
+        
+        const tenant = process.env.CHROMA_TENANT || undefined
+        const database = process.env.CHROMA_DATABASE || undefined
+        const apiKey = process.env.CHROMA_API_KEY || undefined
+
         const client = new ChromaClient({
             host: url.hostname,
             port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80),
             ssl: url.protocol === 'https:',
+            tenant: tenant,
+            database: database,
+            auth: apiKey ? {
+                provider: "token",
+                credentials: apiKey
+            } : undefined
         })
         // Test connectivity
         await client.heartbeat()
@@ -90,9 +101,9 @@ async function tryGetChromaCollection() {
         })
         chromaAvailable = true
         return collection
-    } catch {
+    } catch (err) {
         if (chromaAvailable !== false) {
-            console.warn('⚠️  ChromaDB unavailable — using MongoDB RAG fallback. Run: chroma run --path ./chroma_data')
+            console.warn('⚠️  ChromaDB unavailable — using MongoDB RAG fallback. Details:', err)
             chromaAvailable = false
         }
         return null
