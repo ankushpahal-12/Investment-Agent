@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import HistoryModal from '@/components/HistoryModal'
+import AboutModal from '@/components/AboutModal'
 import RAGIngestionCard from '@/components/RAGIngestionCard'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [recent, setRecent] = useState<RecentReport[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [howItWorksOpen, setHowItWorksOpen] = useState(false)
   const [activeSubTab, setActiveSubTab] = useState<'search' | 'ingest'>('search')
 
@@ -309,13 +311,23 @@ export default function HomePage() {
           >
             History
           </button>
-          <span className="cursor-pointer hover:text-gray-800">About</span>
+          <button
+            onClick={() => setAboutOpen(true)}
+            className="cursor-pointer hover:text-gray-800 transition-colors"
+          >
+            About
+          </button>
         </div>
       </nav>
 
       <HistoryModal
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
+      />
+
+      <AboutModal
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
       />
 
       <div className="max-w-2xl mx-auto px-4 py-12">
@@ -703,6 +715,24 @@ export default function HomePage() {
                   </li>
                   <li>
                     <strong>Exporting reports:</strong> Click the <strong>Export PDF</strong> button at the top of the dashboard. This generates a styled investment memo and launches the system printer dialog to save it directly to your device.
+                  </li>
+                </ul>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">4. Rate Limits & 429 Errors (Too Many Requests)</h3>
+                <p className="mb-2">To protect external API credits and maintain service reliability, StockSage incorporates rate limit checks:</p>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>
+                    <strong>What is a 429 Error?</strong> It is an HTTP status code meaning "Too Many Requests". It occurs when API rate limits (e.g. Groq, Tavily, Finnhub) are reached.
+                  </li>
+                  <li>
+                    <strong>Mitigation & Caching:</strong> The Validation Agent validates input queries early to save API tokens. Furthermore, completed reports are stored in MongoDB. Searching for an already-analyzed company within a short window retrieves the cached report, saving external API requests.
+                  </li>
+                  <li>
+                    <strong>What to do:</strong> If the pipeline aborts with a rate limit error, please wait a minute before starting a new analysis or query a different stock to let the API rate limit cool down.
                   </li>
                 </ul>
               </div>

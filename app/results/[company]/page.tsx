@@ -195,7 +195,7 @@ function OverviewTab({ research }: { research: ResearchData }) {
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">
                     {research.overview}
                 </p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                     {[
                         { label: 'CEO', value: research.CEO },
                         { label: 'Founded', value: research.founded },
@@ -205,7 +205,7 @@ function OverviewTab({ research }: { research: ResearchData }) {
                     ].map(row => (
                         <div key={row.label} className="flex justify-between border-b border-gray-50 py-1.5">
                             <span className="text-gray-400">{row.label}</span>
-                            <span className="text-gray-900 font-medium text-right max-w-[160px]">
+                            <span className="text-gray-900 font-medium text-right max-w-[160px] sm:max-w-[200px] truncate" title={row.value ?? ''}>
                                 {row.value ?? 'N/A'}
                             </span>
                         </div>
@@ -787,7 +787,7 @@ function TrendTab({ company }: { company: string }) {
                                 {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             <div className="bg-gray-50 rounded-lg p-2">
                                 <p className="text-[10px] text-gray-400">Confidence</p>
                                 <p className="text-sm font-medium">{t.confidence}%</p>
@@ -1036,27 +1036,39 @@ export default function ResultsPage() {
             <nav className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
                 <button
                     onClick={() => router.push('/')}
-                    className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
+                    className="text-xs sm:text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1 flex-shrink-0"
                 >
                     ← Back
                 </button>
                 <span className="text-gray-200">|</span>
-                <span className="text-sm font-medium text-gray-900">{report.company}</span>
-                <div className="ml-auto flex gap-2">
+                <span className="text-xs sm:text-sm font-medium text-gray-900 truncate max-w-[100px] sm:max-w-xs" title={report.company}>
+                    {report.company}
+                </span>
+                <div className="ml-auto flex gap-1.5">
                     <button
                         onClick={() => {
                             window.open(`/api/export?company=${encodeURIComponent(report.company)}`, '_blank')
                         }}
-                        className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                        className="text-[11px] sm:text-xs px-2 py-1.5 sm:px-3 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1"
                     >
-                        📄 Export PDF
+                        <span>📄</span>
+                        <span className="hidden sm:inline">Export PDF</span>
+                        <span className="inline sm:hidden">Export</span>
                     </button>
                     <button
                         onClick={handleReanalyze}
                         disabled={reanalyzing}
-                        className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                        className="text-[11px] sm:text-xs px-2 py-1.5 sm:px-3 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors flex items-center gap-1"
                     >
-                        {reanalyzing ? 'Running…' : '↺ Re-analyze'}
+                        {reanalyzing ? (
+                            <span>Running…</span>
+                        ) : (
+                            <>
+                                <span>↺</span>
+                                <span className="hidden sm:inline">Re-analyze</span>
+                                <span className="inline sm:hidden">Refresh</span>
+                            </>
+                        )}
                     </button>
                 </div>
             </nav>
@@ -1164,7 +1176,7 @@ export default function ResultsPage() {
                         </div>
 
                         {/* Navigation / Sidebar Tabs */}
-                        <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-1">
+                        <div className="hidden lg:flex bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex-col gap-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-3 py-2">
                                 Analysis Sections
                             </p>
@@ -1192,6 +1204,25 @@ export default function ResultsPage() {
 
                     {/* Right Column - Tab Content Details */}
                     <div className="lg:col-span-7 space-y-4">
+                        
+                        {/* Horizontal Tab navigation for mobile screen widths */}
+                        <div className="lg:hidden bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm overflow-x-auto whitespace-nowrap flex gap-1 scrollbar-none">
+                            {TABS.map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`
+                                        text-xs px-3.5 py-2 rounded-lg font-medium transition-all flex-shrink-0 cursor-pointer
+                                        ${activeTab === tab
+                                            ? 'bg-gray-900 text-white shadow-sm font-semibold'
+                                            : 'text-gray-600 hover:bg-gray-50'}
+                                    `}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm min-h-[500px]">
                             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
                                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -1331,10 +1362,10 @@ function ReportChat({ company }: { company: string }) {
     }
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end">
             {/* Chat Window */}
             {isOpen && (
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl w-80 sm:w-96 h-[480px] flex flex-col mb-4 overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-5">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] sm:w-96 h-[400px] sm:h-[480px] flex flex-col mb-4 overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-5">
                     {/* Header */}
                     <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between">
                         <div>
