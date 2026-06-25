@@ -4,15 +4,15 @@ StockSage is an advanced investment research platform that automates company ana
 
 ---
 
-## Documentation Directory
+##  Documentation Directory
 
 For deep-dive topics, please refer to the modular developer guides created in the docs folder:
 
-- [Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md): Onboarding instructions, environment configurations, dependencies, and vector database setups.
-- [System Architecture](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/architecture.md): Technology stack breakdown, folder layouts, system flowcharts, and MongoDB database schemas.
-- [How It Works (Pipeline & Agents)](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/how-it-works.md): Detailed examination of the LangGraph state machine, individual agent prompts/models, and the multi-query RAG semantic retrieval engine.
-- [Core & Upgraded Features](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/features.md): In-depth reviews of the 7-feature robustness upgrades (RAG auditor, validation agent, SSE streams, SEC crawler, rate-limiter, PDF generator, and trends).
-- [Troubleshooting & Error Resolution](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/troubleshooting.md): Developer guide for resolving API rate limits, database timeouts, SEC crawling blocks, and ChromaDB cloud connectivity.
+- **[Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md)**: Onboarding instructions, environment configurations, dependencies, and vector database setups.
+- **[System Architecture](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/architecture.md)**: Technology stack breakdown, folder layouts, system flowcharts, and MongoDB database schemas.
+- **[How It Works (Pipeline & Agents)](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/how-it-works.md)**: Detailed examination of the LangGraph state machine, individual agent prompts/models, and the multi-query RAG semantic retrieval engine.
+- **[Core & Upgraded Features](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/features.md)**: In-depth reviews of the 7-feature robustness upgrades (RAG auditor, validation agent, SSE streams, SEC crawler, rate-limiter, PDF generator, and trends).
+- **[Troubleshooting & Error Resolution](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/troubleshooting.md)**: Developer guide for resolving API rate limits, database timeouts, SEC crawling blocks, and ChromaDB fallbacks.
 
 ---
 
@@ -20,22 +20,64 @@ For deep-dive topics, please refer to the modular developer guides created in th
 
 StockSage models the investment research process as a stateful directed graph. Instead of a single large language model trying to synthesize diverse financial dimensions, the platform delegates tasks to a network of specialized agent nodes powered by llama-3.3-70b-versatile (via Groq) that write to a shared, thread-safe state.
 
-The orchestration pipeline executes the following sequence:
-
-1. Validation Node: This is the entry point of the pipeline. It takes the company name input, attempts to resolve it to an active trading symbol (ticker) via Finnhub, and checks if it exists. If the input is invalid, it writes an error message to the state and triggers early termination of the graph.
-2. Research Node: Triggered only if validation succeeds. It fetches the qualitative background of the company (CEO, founding year, headquarters, product lines, and direct competitors) using Tavily, Wikipedia, and Finnhub, then saves the profile as a document in the vector store.
-3. Financial Node: Analyzes numeric financial statements, operating margins, YoY growth rates, capital structures (debt-to-equity), valuation ratios, and analysts' target price recommendations.
-4. News Node: Crawls global news articles covering the target company from the last 7 days and uses the LLM to assign sentiment scores (positive, negative, or neutral) to gauge active market narratives.
-5. Retrieval-Augmented Generation (RAG) Node: Performs multiple semantic searches on indexed company disclosures (10-K and 10-Q filings) stored in Chroma Cloud. It extracts relevant context surrounding credit covenants, litigation, and revenue segments.
-6. Risk Node: Compiles a structural risk audit, detailing internal and external hazards, sector barriers, and drafts comprehensive bull-case and bear-case scenarios.
-7. Decision Node: Consolidates all state information (Research, Financials, News, RAG, and Risk data), computes a final recommendation (INVEST or PASS), assigns a confidence percentage, determines a 12-month target price, and outlines the primary investment thesis.
+```
+                  ┌──────────────────────┐
+                  │      __start__       │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │   Validation Agent   │ ---> Resolves stock ticker & verifies company.
+                  └──────────┬───────────┘      Fails fast if invalid.
+                             │
+                     { Is Valid Ticker? }
+                     /                \
+                   No                 Yes
+                   /                    \
+                  ▼                      ▼
+        ┌──────────────────┐    ┌──────────────────┐
+        │     __end__      │    │  Research Agent  │ ---> Fetches corporate history, CEO,
+        │ (Early Abortion) │    └────────┬─────────┘      products, and key competitors.
+        └──────────────────┘             │
+                                         ▼
+                                ┌──────────────────┐
+                                │ Financial Agent  │ ---> Analyzes valuation, growth ratios, FCF,
+                                └────────┬─────────┘      margins, and balance sheet health.
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │    News Agent    │ ---> Gathers news articles from last 7 days
+                                └────────┬─────────┘      and computes net sentiment score.
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │  RAG Router Node │ ---> Performs 5 targeted semantic lookups
+                                └────────┬─────────┘      over indexed SEC filings (10-K/10-Q).
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │    Risk Agent    │ ---> Plays devil's advocate; outlines bull/bear
+                                └────────┬─────────┘      cases, systemic risks, credit warnings.
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │  Decision Agent  │ ---> Synthesizes all nodes + RAG context, writes
+                                └────────┬─────────┘      thesis, price target, and BUY/HOLD/SELL.
+                                         │
+                                         ▼
+                                ┌──────────────────┐
+                                │      __end__     │ ---> Saves to MongoDB and updates history.
+                                └──────────────────┘
+```
 
 ---
 
-## Environment Configuration
+## Quick Start (60-Second Setup)
 
-Copy the following template and paste it into a file named .env in the root directory of the project. Fill in the placeholders with your API keys and credentials:
+For full setup details, refer to the [Getting Started Guide](file:///c:/Users/ankus/Desktop/Assigment%20Task/investment-agent/docs/getting-started.md). Here is the rapid command sequence to get the platform running locally:
 
+### 1. Configure the Environment
+Create a `.env` file in the root directory:
 ```env
 # Groq API Keys for Agent Nodes
 # These keys authenticate your connection to the Groq API. You can use the same key for all fields
