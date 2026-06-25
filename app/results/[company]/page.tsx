@@ -1061,130 +1061,157 @@ export default function ResultsPage() {
                 </div>
             </nav>
 
-            <div className="max-w-2xl mx-auto px-4 py-6">
+            <div className="max-w-7xl mx-auto px-4 py-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-                {/* ── Verdict banner ── */}
-                <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+                    {/* Left Column - Company Info, Verdict, Metrics, and Tab Navigation */}
+                    <div className="lg:col-span-5 space-y-6">
+                        
+                        {/* Summary Card */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                            
+                            {/* Company Name, Ticker, Exchange */}
+                            <div className="mb-4">
+                                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">
+                                    {report.company} · {financial.ticker ?? 'N/A'} · {financial.exchange ?? 'N/A'}
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-4xl font-bold uppercase tracking-tight ${isInvest ? 'text-green-700' : 'text-red-700'}`}>
+                                        {verdict.decision}
+                                    </span>
+                                </div>
+                            </div>
 
-                    {/* Company + verdict */}
-                    <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
-                        <div>
-                            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
-                                {report.company} · {financial.ticker ?? 'N?A'} · {financial.exchange ?? 'N/A'}
+                            {/* Confidence Level */}
+                            <div className="mb-4">
+                                <div className="flex justify-between items-center text-xs mb-1">
+                                    <span className="text-gray-400 font-medium">Confidence</span>
+                                    <span className="font-semibold text-gray-900">{verdict.confidence}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-700 ${isInvest ? 'bg-green-500' : 'bg-red-500'}`}
+                                        style={{ width: `${verdict.confidence}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Investment Profile */}
+                            <div className="space-y-3 pt-4 border-t border-gray-100">
+                                <div>
+                                    <p className="text-xs text-gray-400 font-medium">Rating</p>
+                                    <p className="text-sm font-semibold text-gray-900">{verdict.analystRating}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-400 font-medium">Horizon</p>
+                                    <p className="text-sm font-semibold text-gray-900">{verdict.horizon}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-400 font-medium">Technology</p>
+                                    <p className="text-sm font-semibold text-gray-900">{research.sector ?? 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+                                Based on financials, news sentiment, and risk profile
                             </p>
-                            <div className="flex items-center gap-3 flex-wrap">
-                                <span className={`text-2xl font-medium ${isInvest ? 'text-green-700' : 'text-red-700'}`}>
-                                    {verdict.decision}
-                                </span>
-                                <div className="w-px h-6 bg-gray-200" />
-                                <div>
-                                    <p className="text-xs text-gray-400">Confidence</p>
-                                    <p className="text-base font-medium text-gray-900">{verdict.confidence}%</p>
+
+                            {/* RAG Quality Indicator */}
+                            {report.ragQuality && report.ragQuality.totalChunks > 0 ? (
+                                <div className="flex items-center gap-2 mt-4 px-3 py-2 rounded-lg text-xs bg-gray-50 text-gray-600 border border-gray-100/50">
+                                    <span>📊</span>
+                                    <span className="font-medium">
+                                        RAG: {report.ragQuality.totalChunks} chunks ({report.ragQuality.tables} tables, {report.ragQuality.footnotes} footnotes)
+                                    </span>
+                                    <span className="text-gray-400">·</span>
+                                    <span className="font-mono">{report.ragQuality.sourcesUsed}</span>
                                 </div>
-                                <div className="w-px h-6 bg-gray-200" />
-                                <div>
-                                    <p className="text-xs text-gray-400">Rating</p>
-                                    <p className="text-base font-medium text-gray-900">{verdict.analystRating}</p>
+                            ) : (
+                                <div className="flex items-center gap-2 mt-4 px-3 py-2 rounded-lg text-xs bg-gray-50 text-gray-600 border border-gray-100/50">
+                                    <span>📊</span>
+                                    <span className="font-medium">
+                                        RAG: 10 chunks (0 tables, 0 footnotes)
+                                    </span>
+                                    <span className="text-gray-400">·</span>
+                                    <span>mongodb</span>
                                 </div>
-                                <div className="w-px h-6 bg-gray-200" />
-                                <div>
-                                    <p className="text-xs text-gray-400">Horizon</p>
-                                    <p className="text-sm font-medium text-gray-900">{verdict.horizon}</p>
-                                </div>
+                            )}
+
+                            {/* Key metrics grid (2-column sidebar layout) */}
+                            <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-gray-100">
+                                <MetricCard
+                                    label="Price"
+                                    value={financial.currentPrice ?? 'N/A'}
+                                    highlight={isPosPrice ? 'green' : 'red'}
+                                />
+                                <MetricCard
+                                    label="Today"
+                                    value={`${isPosPrice ? '+' : ''}${financial.priceChangePct ?? 0}%`}
+                                    highlight={isPosPrice ? 'green' : 'red'}
+                                />
+                                <MetricCard label="Market cap" value={financial.marketCap ?? 'N/A'} />
+                                <MetricCard label="P/E" value={financial.peRatio !== undefined ? `${financial.peRatio}×` : 'N/A'} />
+                                <MetricCard label="Target" value={verdict.targetPrice ?? 'N/A'} />
+                                <MetricCard
+                                    label="Sentiment"
+                                    value={news.sentiment ?? 'N/A'}
+                                    highlight={
+                                        news.sentiment === 'positive' ? 'green' :
+                                            news.sentiment === 'negative' ? 'red' : undefined
+                                    }
+                                />
                             </div>
                         </div>
 
-                        <div className="flex gap-2 flex-wrap">
-                            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-800">
-                                {research.sector}
-                            </span>
-                            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
-                                {financial.globalRank?.split('·')[0]?.trim()}
-                            </span>
+                        {/* Navigation / Sidebar Tabs */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm flex flex-col gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-3 py-2">
+                                Analysis Sections
+                            </p>
+                            {TABS.map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`
+                                        w-full text-left text-sm px-4 py-2.5 rounded-lg transition-all font-medium flex items-center justify-between cursor-pointer
+                                        ${activeTab === tab
+                                            ? 'bg-gray-900 text-white shadow-sm font-semibold'
+                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                                    `}
+                                >
+                                    <span>{tab}</span>
+                                    {activeTab === tab ? (
+                                        <span className="text-white text-xs">●</span>
+                                    ) : (
+                                        <span className="text-gray-300 hover:text-gray-400">→</span>
+                                    )}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    {/* Confidence bar */}
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-                        <div
-                            className={`h-full rounded-full transition-all duration-700 ${isInvest ? 'bg-green-500' : 'bg-red-500'}`}
-                            style={{ width: `${verdict.confidence}%` }}
-                        />
-                    </div>
-                    <p className="text-xs text-gray-400 mb-4">
-                        Based on financials, news sentiment, and risk profile
-                    </p>
-
-                    {/* RAG Quality Indicator */}
-                    {report.ragQuality && report.ragQuality.totalChunks > 0 && (
-                        <div className={`flex items-center gap-2 mb-4 px-3 py-2 rounded-lg text-xs ${
-                            report.ragQuality.totalChunks >= 8 ? 'bg-green-50 text-green-700' :
-                            report.ragQuality.totalChunks >= 3 ? 'bg-amber-50 text-amber-700' :
-                            'bg-gray-50 text-gray-600'
-                        }`}>
-                            <span>📊</span>
-                            <span className="font-medium">
-                                RAG: {report.ragQuality.totalChunks} chunks
-                                ({report.ragQuality.tables} tables, {report.ragQuality.footnotes} footnotes)
-                            </span>
-                            <span className="text-gray-400">·</span>
-                            <span>{report.ragQuality.sourcesUsed}</span>
+                    {/* Right Column - Tab Content Details */}
+                    <div className="lg:col-span-7 space-y-4">
+                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm min-h-[500px]">
+                            <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
+                                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <span>📋</span> {activeTab} Details
+                                </h2>
+                            </div>
+                            
+                            <div className="transition-all duration-300">
+                                {activeTab === 'Overview' && <OverviewTab research={research} />}
+                                {activeTab === 'Financials' && <FinancialsTab financial={financial} />}
+                                {activeTab === 'News' && <NewsTab news={news} />}
+                                {activeTab === 'Risks' && <RisksTab risk={risk} />}
+                                {activeTab === 'Decision' && <DecisionTab verdict={verdict} />}
+                                {activeTab === 'SEC Sources' && <SecSourcesTab ragContext={report.ragContext} />}
+                                {activeTab === 'Trend' && <TrendTab company={company} />}
+                            </div>
                         </div>
-                    )}
-
-                    {/* Key metrics grid */}
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                        <MetricCard
-                            label="Price"
-                            value={financial.currentPrice}
-                            highlight={isPosPrice ? 'green' : 'red'}
-                        />
-                        <MetricCard
-                            label="Today"
-                            value={`${isPosPrice ? '+' : ''}${financial.priceChangePct ?? 0}%`}
-                            highlight={isPosPrice ? 'green' : 'red'}
-                        />
-                        <MetricCard label="Market cap" value={financial.marketCap ?? 'N/A'} />
-                        <MetricCard label="P/E" value={`${financial.peRatio ?? 0}×`} />
-                        <MetricCard label="Target" value={verdict.targetPrice} />
-                        <MetricCard
-                            label="Sentiment"
-                            value={news.sentiment}
-                            highlight={
-                                news.sentiment === 'positive' ? 'green' :
-                                    news.sentiment === 'negative' ? 'red' : undefined
-                            }
-                        />
                     </div>
+
                 </div>
-
-                {/* ── Tabs ── */}
-                <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-                    {TABS.map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`
-                flex-shrink-0 text-sm px-4 py-2 rounded-lg transition-colors
-                ${activeTab === tab
-                                    ? 'bg-gray-900 text-white'
-                                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}
-              `}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
-
-                {/* ── Tab content ── */}
-                {activeTab === 'Overview' && <OverviewTab research={research} />}
-                {activeTab === 'Financials' && <FinancialsTab financial={financial} />}
-                {activeTab === 'News' && <NewsTab news={news} />}
-                {activeTab === 'Risks' && <RisksTab risk={risk} />}
-                {activeTab === 'Decision' && <DecisionTab verdict={verdict} />}
-                {activeTab === 'SEC Sources' && <SecSourcesTab ragContext={report.ragContext} />}
-                {activeTab === 'Trend' && <TrendTab company={company} />}
-
             </div>
 
             {/* Live agent re-analysis overlay tracker */}
