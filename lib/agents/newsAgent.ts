@@ -1,18 +1,31 @@
+// lib/agents/newsAgent.ts
 // ─── News Agent ───────────────────────────────────────────────────────────────
-// Data sources: NewsAPI + Finnhub Company News
-// NO LLM — rule-based sentiment scoring
+// Data sources: NewsAPI + Finnhub
+// Pure NLP + rule-based sentiment — NO LLM, NO AI API calls
 // Injects news articles into RAG for Decision Agent
 
 import { AgentState, NewsData } from '../../types'
 import { fetchCompanyNews, computeOverallSentiment, NewsArticle } from '../tools/newsData'
 import { getCompanyNews } from '../tools/finnhub'
 import { addDocumentsToRAG, buildNewsDoc } from '../rag/vectorStore'
+import { analyzeNewsNLP, analyzeHeadline } from '../nlp/sentimentAnalyzer'
 
-// ─── Merge and deduplicate articles ──────────────────────────────────────────
 
+interface EnrichedNewsData extends NewsData {
+    nlpScore: number
+    positiveWords: string[]
+    negativeWords: string[]
+    headlineScores: Array<{ text: string; score: number; label: string }>
+    sourceBreakdown: Record<string, number>
+}
 function deduplicateArticles(
     newsApiArticles: NewsArticle[],
-    finnhubItems: Array<{ headline: string; summary: string; url: string; datetime: number }>
+    finnhubItems: Array<{
+        headline: string
+        summary: string
+        url: string
+        datetime: number
+    }>
 ): NewsArticle[] {
     const seen = new Set<string>()
     const result: NewsArticle[] = []
@@ -44,7 +57,6 @@ function deduplicateArticles(
     return result
 }
 
-// ─── Classify media attention ─────────────────────────────────────────────────
 
 function classifyMediaAttention(count: number): 'high' | 'medium' | 'low' {
     if (count >= 8) return 'high'
@@ -52,7 +64,6 @@ function classifyMediaAttention(count: number): 'high' | 'medium' | 'low' {
     return 'low'
 }
 
-// ─── Extract recent events (titles of most recent articles) ───────────────────
 
 function extractRecentEvents(articles: NewsArticle[], n = 5): string[] {
     return articles
@@ -61,7 +72,94 @@ function extractRecentEvents(articles: NewsArticle[], n = 5): string[] {
         .map(a => a.title)
 }
 
-// ─── Main Agent ───────────────────────────────────────────────────────────────
+
+function buildSourceBreakdown(articles: NewsArticle[]): Record<string, number> {
+    return articles.reduce((acc, a) => {
+        const src = a.source?.name ?? 'Unknown'
+        acc[src] = (acc[src] ?? 0) + 1
+        return acc
+    }, {} as Record<string, number>)
+}
+
+
+
+function buildSummary(
+    company: string,
+    articles: NewsArticle[],
+    sentiment: string,
+    score: number,
+    posWords: string[],
+    negWords: string[]
+): string {
+    if (articles.length === 0) {
+        return `No recent news found for ${company}.`
+    }
+
+    const tone =
+        score > 50 ? 'very positive' :
+            score > 20 ? 'positive' :
+                score > -20 ? 'mixed' :
+                    score > -50 ? 'negative' : 'very negative'
+
+    let summary = `Found ${articles.length} recent articles for ${company}. `
+    summary += `Overall sentiment is ${tone} (${score}/100). `
+
+    if (posWords.length > 0) {
+        summary += `Positive signals include: ${posWords.slice(0, 3).join(', ')}. `
+    }
+    if (negWords.length > 0) {
+        summary += `Key concerns: ${negWords.slice(0, 3).join(', ')}.`
+    }
+
+    return summary.trim()
+}
+
+
+function buildBullishBearishFromNLP(
+    articles: NewsArticle[],
+    headlineScores: Array<{ text: string; score: number; label: string }>
+): { bullishPoints: string[]; bearishPoints: string[] } {
+
+    const bullishPoints: string[] = []
+    const bearishPoints: string[] = []
+
+    headlineScores.forEach((h, i) => {
+        const article = articles[i]
+        if (!article) return
+
+        if (h.label === 'positive' && h.score > 15) {
+            bullishPoints.push(h.text)
+        } else if (h.label === 'negative' && h.score < -15) {
+            bearishPoints.push(h.text)
+        }
+    })
+
+    // Fallback — if NLP found nothing extreme use rule-based
+    return {
+        bullishPoints: bullishPoints.slice(0, 4),
+        bearishPoints: bearishPoints.slice(0, 4),
+    }
+}
+
+
+function blendScores(
+    ruleBasedScore: number,
+    nlpScore: number
+): number {
+    // Equal weight — both are deterministic, no hallucination risk
+    const blended = Math.round((ruleBasedScore * 0.5) + (nlpScore * 0.5))
+    return Math.max(-100, Math.min(100, blended))
+}
+
+
+
+function scoreToLabel(score: number): 'positive' | 'negative' | 'mixed' {
+    if (score > 25) return 'positive'
+    if (score < -25) return 'negative'
+    return 'mixed'
+}
+
+
 
 export async function newsAgent(
     state: AgentState
@@ -72,51 +170,116 @@ export async function newsAgent(
     try {
         const ticker = (state as AgentState & { ticker?: string }).ticker
 
-        // Step 1: Fetch from both sources in parallel
+
         const [newsApiResult, finnhubNewsItems] = await Promise.all([
             fetchCompanyNews(state.company, 10),
             ticker ? getCompanyNews(ticker, 7) : Promise.resolve([]),
         ])
-
-        // Step 2: Merge + deduplicate
         const allArticles = deduplicateArticles(
             newsApiResult.articles,
             finnhubNewsItems
         )
 
+        console.log(`Total articles after dedup: ${allArticles.length}`)
+
         if (allArticles.length === 0) {
-            console.warn(`News Agent: No articles found for "${state.company}"`)
+            console.warn(`No articles found for "${state.company}"`)
         }
 
-        // Step 3: Rule-based sentiment scoring
-        const { sentiment, sentimentScore, bullishPoints, bearishPoints } =
-            computeOverallSentiment(allArticles)
 
-        const newsData: NewsData = {
-            headlines: allArticles.map(a => a.title),
-            sentiment,
-            sentimentScore,
-            summary: allArticles.length > 0
-                ? `Found ${allArticles.length} recent articles. Sentiment is ${sentiment} with a score of ${sentimentScore}/100.`
-                : `No recent news articles found for ${state.company}.`,
-            bullishPoints,
-            bearishPoints,
+        const ruleBased = computeOverallSentiment(allArticles)
+
+        console.log(`Rule-based score: ${ruleBased.sentimentScore}/100`)
+
+        const headlines = allArticles.map(a => a.title)
+        const contents = allArticles.map(a => a.description ?? a.content ?? '')
+
+        const nlpResult = analyzeNewsNLP(headlines, contents)
+        const headlineScores = headlines.map(h => analyzeHeadline(h))
+
+        console.log(`NLP score:        ${nlpResult.score}/100`)
+        console.log(`Positive words:   ${nlpResult.positiveWords.slice(0, 5).join(', ')}`)
+        console.log(`Negative words:   ${nlpResult.negativeWords.slice(0, 5).join(', ')}`)
+        const finalScore = blendScores(ruleBased.sentimentScore, nlpResult.score)
+        const finalSentiment = scoreToLabel(finalScore)
+
+        console.log(`Blended score:    ${finalScore}/100 → ${finalSentiment}`)
+
+
+        const { bullishPoints, bearishPoints } = buildBullishBearishFromNLP(
+            allArticles,
+            headlineScores
+        )
+
+        // Merge with rule-based if NLP found nothing
+        const finalBullish = bullishPoints.length > 0
+            ? bullishPoints
+            : ruleBased.bullishPoints
+
+        const finalBearish = bearishPoints.length > 0
+            ? bearishPoints
+            : ruleBased.bearishPoints
+
+
+        const summary = buildSummary(
+            state.company,
+            allArticles,
+            finalSentiment,
+            finalScore,
+            nlpResult.positiveWords,
+            nlpResult.negativeWords
+        )
+        try {
+            const ragDocs = allArticles.slice(0, 5).map(a =>
+                buildNewsDoc(
+                    state.company,
+                    a.title,
+                    a.description ?? a.content ?? ''
+                )
+            )
+            if (ragDocs.length > 0) {
+                await addDocumentsToRAG(ragDocs)
+                console.log(`Ingested ${ragDocs.length} articles into RAG`)
+            }
+        } catch (ragError) {
+            // Non-critical — log and continue
+            console.warn('RAG ingestion failed (non-critical):', ragError)
+        }
+
+        // ── Step 9: Build final enriched news data ────────────────────────────────
+        const newsData: EnrichedNewsData = {
+            // Core fields
+            headlines: headlines,
+            sentiment: finalSentiment,
+            sentimentScore: finalScore,
+            summary,
+            bullishPoints: finalBullish,
+            bearishPoints: finalBearish,
             recentEvents: extractRecentEvents(allArticles, 5),
             mediaAttention: classifyMediaAttention(allArticles.length),
             newsVolume: `${allArticles.length} articles`,
+
+            // NLP enrichment — pure data, no AI
+            nlpScore: nlpResult.score,
+            positiveWords: nlpResult.positiveWords,
+            negativeWords: nlpResult.negativeWords,
+            headlineScores: headlineScores.map(h => ({
+                text: h.text,
+                score: h.score,
+                label: h.label,
+            })),
+            sourceBreakdown: buildSourceBreakdown(allArticles),
         }
 
-        // Step 4: Ingest top articles into RAG
-        const ragDocs = allArticles.slice(0, 5).map(a =>
-            buildNewsDoc(
-                state.company,
-                a.title,
-                a.description ?? a.content ?? ''
-            )
-        )
-        if (ragDocs.length > 0) await addDocumentsToRAG(ragDocs)
-
-        console.log(`News Agent done — ${sentiment} sentiment (${sentimentScore}/100), ${allArticles.length} articles`)
+        console.log(`\n━━━ News Agent Summary ━━━`)
+        console.log(`Company:      ${state.company}`)
+        console.log(`Articles:     ${allArticles.length}`)
+        console.log(`Rule-based:   ${ruleBased.sentimentScore}/100`)
+        console.log(`NLP:          ${nlpResult.score}/100`)
+        console.log(`Final:        ${finalScore}/100 → ${finalSentiment}`)
+        console.log(`Bullish:      ${finalBullish.length} signals`)
+        console.log(`Bearish:      ${finalBearish.length} signals`)
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
 
         return { newsData, error: undefined }
 

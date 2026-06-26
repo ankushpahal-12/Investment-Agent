@@ -50,6 +50,10 @@ export interface NewsData {
     recentEvents: string[]
     mediaAttention: 'high' | 'medium' | 'low'
     newsVolume: string
+    nlpScore?: number       // raw NLP score before LLM adjustment
+    nlpAgreement?: boolean      // did LLM agree with NLP?
+    positiveWords?: string[]     // finance keywords that drove positive score
+    negativeWords?: string[]
 }
 
 export interface RiskData {
