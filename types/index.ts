@@ -99,6 +99,9 @@ export interface ValuationData {
     terminalGrowthRate: number
     assumptions: string
     formulaApplied: string
+    baseFreeCashFlow?: number
+    netDebt?: number
+    sharesOutstanding?: number
 }
 
 export interface AgentState {

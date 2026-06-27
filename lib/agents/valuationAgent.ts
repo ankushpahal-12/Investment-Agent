@@ -115,7 +115,10 @@ Share Price = [Enterprise Value - Net Debt] / Shares Outstanding
             revenueGrowthRate: Math.round(g * 1000) / 10,
             terminalGrowthRate: Math.round(tg * 1000) / 10,
             assumptions: projections.assumptions,
-            formulaApplied
+            formulaApplied,
+            baseFreeCashFlow: baseFCF,
+            netDebt,
+            sharesOutstanding: shares
         }
 
         console.log(`Valuation Agent done — Intrinsic Share Price: $${intrinsicValue} vs Current Price: $${currentPrice} (Gap: ${valuationGapPct}%)`)

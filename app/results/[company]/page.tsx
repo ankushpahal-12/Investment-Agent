@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,9 @@ interface ValuationData {
     terminalGrowthRate: number
     assumptions: string
     formulaApplied: string
+    baseFreeCashFlow?: number
+    netDebt?: number
+    sharesOutstanding?: number
 }
 
 interface ReportData {
@@ -202,7 +205,7 @@ function SectionCard({
 
 function OverviewTab({ research }: { research: ResearchData }) {
     return (
-        <div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SectionCard title="Company overview" icon="🏢">
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">
                     {research.overview}
@@ -274,8 +277,36 @@ function ValuationTab({ valuation }: { valuation: ValuationData | undefined }) {
     const gapColor = isUndervalued ? 'green' : valuation.valuationGapPct < 0 ? 'red' : 'gray'
     const gapSymbol = isUndervalued ? '+' : ''
 
+    // Sensitivity analysis configuration
+    const currentPrice = valuation.currentPrice || 100
+    const waccBase = (valuation.wacc ?? 9.5) / 100
+    const growthBase = (valuation.revenueGrowthRate ?? 7.0) / 100
+    const tgBase = (valuation.terminalGrowthRate ?? 2.5) / 100
+    const netDebtBase = valuation.netDebt ?? 0
+    const baseFCFBase = valuation.baseFreeCashFlow ?? (currentPrice * (valuation.sharesOutstanding ?? 1000) * 0.06)
+    const sharesBase = valuation.sharesOutstanding ?? 1000
+
+    const waccSteps = [waccBase - 0.02, waccBase - 0.01, waccBase, waccBase + 0.01, waccBase + 0.02]
+    const growthSteps = [growthBase - 0.02, growthBase - 0.01, growthBase, growthBase + 0.01, growthBase + 0.02]
+
+    function calculateDCF(baseFCF: number, w: number, g: number, tg: number, netDebt: number, shares: number) {
+        if (w <= tg) return 0 // Math safety
+        let pvOfCashFlows = 0
+        let currentFCF = baseFCF
+        for (let t = 1; t <= 5; t++) {
+            currentFCF = currentFCF * (1 + g)
+            pvOfCashFlows += currentFCF / Math.pow(1 + w, t)
+        }
+        const terminalValue = (currentFCF * (1 + tg)) / (w - tg)
+        const pvOfTerminalValue = terminalValue / Math.pow(1 + w, 5)
+        const enterpriseValue = pvOfCashFlows + pvOfTerminalValue
+        const equityValue = enterpriseValue - netDebt
+        const value = shares > 0 ? (equityValue / shares) : 0
+        return Math.round(value * 100) / 100
+    }
+
     return (
-        <div className="space-y-5 animate-in fade-in duration-300">
+        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SectionCard title="DCF Intrinsic Valuation Model" icon="📊">
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3">
                     <MetricCard
@@ -311,6 +342,55 @@ function ValuationTab({ valuation }: { valuation: ValuationData | undefined }) {
                 </div>
             </SectionCard>
 
+            {/* DCF Sensitivity Matrix */}
+            <SectionCard title="Valuation Sensitivity Matrix (WACC vs. Growth)" icon="🧮">
+                <p className="text-[11px] text-gray-400 mb-4">
+                    Shows fair value share prices under varying cost of capital (WACC) and FCF growth assumptions. Center cell highlights current model settings.
+                </p>
+                <div className="overflow-x-auto border border-gray-100 rounded-lg">
+                    <table className="w-full text-center border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-2 py-2 text-[10px] font-semibold text-gray-500 uppercase text-left">WACC \ Growth</th>
+                                {growthSteps.map((g, i) => (
+                                    <th key={i} className="px-2 py-2 text-[10px] font-semibold text-gray-500 uppercase">
+                                        {(g * 100).toFixed(1)}%
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {waccSteps.map((w, rIdx) => (
+                                <tr key={rIdx} className="border-b border-gray-50 last:border-0">
+                                    <td className="px-2 py-2 bg-gray-50/50 text-[10px] font-semibold text-gray-500 text-left">
+                                        {(w * 100).toFixed(1)}%
+                                    </td>
+                                    {growthSteps.map((g, cIdx) => {
+                                        const cellVal = calculateDCF(baseFCFBase, w, g, tgBase, netDebtBase, sharesBase)
+                                        const gap = ((cellVal - currentPrice) / currentPrice) * 100
+                                        const isCenter = rIdx === 2 && cIdx === 2
+                                        return (
+                                            <td
+                                                key={cIdx}
+                                                className={`px-2 py-2 text-xs font-medium transition-all ${
+                                                    isCenter 
+                                                        ? 'bg-yellow-50/70 border-2 border-amber-400 font-bold shadow-sm'
+                                                        : gap > 0 
+                                                            ? 'bg-green-50/60 text-green-700 hover:bg-green-100/70'
+                                                            : 'bg-red-50/60 text-red-700 hover:bg-red-100/70'
+                                                }`}
+                                            >
+                                                ${cellVal.toFixed(2)}
+                                            </td>
+                                        )
+                                    })}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </SectionCard>
+
             <SectionCard title="Analyst Assumptions & Rationale" icon="📝">
                 <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {valuation.assumptions}
@@ -318,7 +398,7 @@ function ValuationTab({ valuation }: { valuation: ValuationData | undefined }) {
             </SectionCard>
 
             <SectionCard title="Model Formulas & Mathematical Framework" icon="📐">
-                <div className="p-3 bg-gray-50 text-gray-500 rounded-lg font-mono text-[10px] whitespace-pre-wrap leading-normal">
+                <div className="p-3 bg-gray-50/80 text-gray-500 rounded-lg font-mono text-[10px] whitespace-pre-wrap leading-normal">
                     {valuation.formulaApplied}
                 </div>
                 <div className="text-[10px] text-gray-400 mt-2.5 italic">
@@ -331,9 +411,8 @@ function ValuationTab({ valuation }: { valuation: ValuationData | undefined }) {
 
 function FinancialsTab({ financial }: { financial: FinancialData }) {
     const isPositive = financial.priceChangePct >= 0
-
     return (
-        <div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SectionCard title="Share price & market data" icon="📈">
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3">
                     <MetricCard
@@ -398,7 +477,7 @@ function NewsTab({ news }: { news: NewsData }) {
             news.sentimentScore < -40 ? 'text-red-600' : 'text-amber-600'
 
     return (
-        <div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SectionCard title="Sentiment overview" icon="📰">
                 <div className="flex items-center gap-3 mb-4">
                     <Badge color={sentimentColor}>
@@ -483,7 +562,7 @@ function RisksTab({ risk }: { risk: RiskData }) {
             risk.moatStrength === 'MODERATE' ? 'amber' : 'red'
 
     return (
-        <div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SectionCard title="Risk summary" icon="⚠️">
                 <div className="flex items-center gap-3 mb-4 flex-wrap">
                     <div className="flex items-center gap-2">
@@ -932,6 +1011,35 @@ export default function ResultsPage() {
     const [completedSteps, setCompletedSteps] = useState<string[]>([])
     const [decisionTokens, setDecisionTokens] = useState('')
 
+    const terminalRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (terminalRef.current) {
+            terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+        }
+    }, [decisionTokens])
+
+    function formatTokens(text: string) {
+        return text.split(/(\bINVEST\b|\bPASS\b|\bBUY\b|\bHOLD\b|\bSELL\b|\d+(?:\.\d+)?%|\$\d+(?:\.\d+)?)/g).map((part, i) => {
+            if (part === 'INVEST' || part === 'BUY') {
+                return <span key={i} className="text-emerald-400 font-bold">{part}</span>
+            }
+            if (part === 'PASS' || part === 'SELL') {
+                return <span key={i} className="text-rose-400 font-bold">{part}</span>
+            }
+            if (part === 'HOLD') {
+                return <span key={i} className="text-amber-400 font-bold">{part}</span>
+            }
+            if (part.endsWith('%')) {
+                return <span key={i} className="text-cyan-300 font-semibold">{part}</span>
+            }
+            if (part.startsWith('$')) {
+                return <span key={i} className="text-yellow-300 font-semibold">{part}</span>
+            }
+            return part
+        })
+    }
+
     const AGENT_STEPS = [
         { key: 'validation', label: 'Validation Agent', desc: 'Verifying company name & resolving ticker' },
         { key: 'research', label: 'Research Agent', desc: 'Company overview, sector, leadership' },
@@ -1193,7 +1301,7 @@ export default function ResultsPage() {
                     <div className="lg:col-span-5 space-y-6">
                         
                         {/* Summary Card */}
-                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        <div className="bg-white/70 backdrop-blur-md border border-gray-200/50 rounded-xl p-6 shadow-md">
                             
                             {/* Company Name, Ticker, Exchange */}
                             <div className="mb-4">
@@ -1294,7 +1402,7 @@ export default function ResultsPage() {
                     <div className="lg:col-span-7 space-y-4">
                         
                         {/* Horizontal Tab navigation for all screen widths */}
-                        <div className="bg-white border border-gray-200 rounded-xl p-2 shadow-sm flex flex-wrap gap-1.5 mb-4">
+                        <div className="bg-white/70 backdrop-blur-md border border-gray-200/50 rounded-xl p-2 shadow-sm flex flex-wrap gap-1.5 mb-4">
                             {TABS.map(tab => (
                                 <button
                                     key={tab}
@@ -1311,7 +1419,7 @@ export default function ResultsPage() {
                             ))}
                         </div>
 
-                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm min-h-[500px]">
+                        <div className="bg-white/75 backdrop-blur-md border border-gray-200/50 rounded-xl p-6 shadow-md min-h-[500px]">
                             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
                                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                     <span>📋</span> {activeTab} Details
@@ -1337,7 +1445,7 @@ export default function ResultsPage() {
             {/* Live agent re-analysis overlay tracker */}
             {reanalyzing && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[3px] transition-all duration-300">
-                    <div className="bg-white border border-gray-100 rounded-2xl p-6 max-w-md w-full shadow-2xl mx-4">
+                    <div className="bg-white/80 backdrop-blur-md border border-white/40 rounded-2xl p-6 max-w-md w-full shadow-2xl mx-4">
                         <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900">Re-analyzing {company}</h3>
@@ -1396,12 +1504,15 @@ export default function ResultsPage() {
 
                         {/* SSE Token reasoning stream */}
                         {decisionTokens && (
-                            <div className="mt-4 p-3 bg-gray-950 text-emerald-400 rounded-lg font-mono text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner">
+                            <div
+                                ref={terminalRef}
+                                className="mt-4 p-3 bg-gray-950 text-emerald-400/90 rounded-lg font-mono text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner scroll-smooth"
+                            >
                                 <div className="text-gray-500 mb-1 border-b border-gray-800 pb-0.5 flex items-center justify-between select-none">
                                     <span>⚡ PM Reasoning Stream:</span>
                                     <span className="animate-pulse text-[8px] text-emerald-400">streaming</span>
                                 </div>
-                                {decisionTokens}
+                                {formatTokens(decisionTokens)}
                             </div>
                         )}
                     </div>

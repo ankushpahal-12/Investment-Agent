@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import HistoryModal from '@/components/HistoryModal'
 import AboutModal from '@/components/AboutModal'
 import RAGIngestionCard from '@/components/RAGIngestionCard'
+import TickerModal from '@/components/TickerModal'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -132,8 +133,38 @@ export default function HomePage() {
   const [recent, setRecent] = useState<RecentReport[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [tickerModalOpen, setTickerModalOpen] = useState(false)
   const [howItWorksOpen, setHowItWorksOpen] = useState(false)
   const [activeSubTab, setActiveSubTab] = useState<'search' | 'ingest'>('search')
+
+  const terminalRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+    }
+  }, [decisionTokens])
+
+  function formatTokens(text: string) {
+    return text.split(/(\bINVEST\b|\bPASS\b|\bBUY\b|\bHOLD\b|\bSELL\b|\d+(?:\.\d+)?%|\$\d+(?:\.\d+)?)/g).map((part, i) => {
+      if (part === 'INVEST' || part === 'BUY') {
+        return <span key={i} className="text-emerald-400 font-bold">{part}</span>
+      }
+      if (part === 'PASS' || part === 'SELL') {
+        return <span key={i} className="text-rose-400 font-bold">{part}</span>
+      }
+      if (part === 'HOLD') {
+        return <span key={i} className="text-amber-400 font-bold">{part}</span>
+      }
+      if (part.endsWith('%')) {
+        return <span key={i} className="text-cyan-300 font-semibold">{part}</span>
+      }
+      if (part.startsWith('$')) {
+        return <span key={i} className="text-yellow-300 font-semibold">{part}</span>
+      }
+      return part
+    })
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -359,6 +390,12 @@ export default function HomePage() {
         onClose={() => setAboutOpen(false)}
       />
 
+      <TickerModal
+        open={tickerModalOpen}
+        onClose={() => setTickerModalOpen(false)}
+        onSelect={(symbol) => setCompany(symbol)}
+      />
+
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         {/* Hero */}
@@ -401,7 +438,7 @@ export default function HomePage() {
 
         {/* Search box */}
         {!isAnalyzing && activeSubTab === 'search' && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+          <div className="bg-white/70 backdrop-blur-md border border-gray-200/50 rounded-xl p-6 mb-6 shadow-sm">
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <input
                 suppressHydrationWarning
@@ -452,7 +489,7 @@ export default function HomePage() {
 
         {/* Live agent tracker */}
         {isAnalyzing && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+          <div className="bg-white/75 backdrop-blur-md border border-gray-200/50 rounded-xl p-6 mb-6 shadow-md">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
@@ -565,12 +602,15 @@ export default function HomePage() {
 
             {/* SSE Token reasoning stream */}
             {decisionTokens && (
-              <div className="mt-5 p-4 bg-gray-950 text-emerald-400 rounded-lg font-mono text-xs max-h-48 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div
+                ref={terminalRef}
+                className="mt-5 p-4 bg-gray-950 text-emerald-400/90 rounded-lg font-mono text-xs max-h-48 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner animate-in fade-in slide-in-from-bottom-2 duration-300 scroll-smooth"
+              >
                 <div className="text-gray-500 mb-1 border-b border-gray-800 pb-1 flex items-center justify-between select-none">
                   <span>⚡ Portfolio Manager Reasoning Stream:</span>
                   <span className="animate-pulse px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/25">streaming</span>
                 </div>
-                {decisionTokens}
+                {formatTokens(decisionTokens)}
               </div>
             )}
           </div>
@@ -586,7 +626,7 @@ export default function HomePage() {
               {recent.map((r, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors group"
+                  className="flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-lg px-4 py-3 hover:border-gray-300/80 hover:bg-white/80 transition-all duration-300 group shadow-sm"
                 >
                   {/* Clickable area → goes to results */}
                   <button
@@ -632,6 +672,25 @@ export default function HomePage() {
         )}
 
       </div>
+
+      {/* Ticker Directory Link */}
+      <button
+        onClick={() => setTickerModalOpen(true)}
+        className="fixed bottom-32 left-6 z-40 bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 rounded-full w-10 h-10 flex items-center justify-center cursor-pointer transition-all duration-200 text-gray-500 hover:text-gray-900 group"
+        title="View Popular Stock Tickers"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+          stroke="currentColor"
+          className="w-5 h-5 transition-colors duration-200"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a1.44 1.44 0 0 0 2.037 0l4.318-4.318a1.44 1.44 0 0 0 0-2.037l-9.58-9.581A2.25 2.25 0 0 0 9.568 3Z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
+        </svg>
+      </button>
 
       {/* GitHub Repository Link */}
       <a
@@ -737,16 +796,19 @@ export default function HomePage() {
                 <p className="mb-3">When you launch an analysis, StockSage runs a sequential LangGraph workflow. The progress bar updates as each specialized agent completes its analysis:</p>
                 <ol className="list-decimal pl-5 space-y-3">
                   <li>
-                    <strong>Validation Agent:</strong> Evaluates your input string to ensure it resolves to a real, actively traded stock symbol via Finnhub. If it fails, the pipeline terminates immediately to protect API limits.
+                    <strong>Validation Agent:</strong> Evaluates your input string to ensure it resolves to a real, actively traded stock symbol via Finnhub. If it fails, the pipeline terminates immediately.
                   </li>
                   <li>
-                    <strong>Research Agent:</strong> Pulls general corporate attributes (including CEO identity, headquarters location, founding year, key product segments, and direct competitors) using Tavily Search and Wikipedia.
+                    <strong>Research Agent:</strong> Pulls general corporate attributes (including CEO, headquarters, founding year, key product segments, and direct competitors) using Tavily Search and Wikipedia.
                   </li>
                   <li>
-                    <strong>Financial Agent:</strong> Gathers key fundamental numbers from stock market APIs, including EV/EBITDA, P/E ratios, profit margins, YoY revenue growth rates, debt leverage, and consensus analyst price targets.
+                    <strong>Financial Agent:</strong> Gathers key fundamental numbers from stock market APIs, including operating margins, P/E ratios, revenue growth rates, debt leverage, and analyst targets.
                   </li>
                   <li>
-                    <strong>News Agent:</strong> Crawls global news databases covering stories published over the last seven days, using the LLM to score net sentiment metrics and highlight catalyst events.
+                    <strong>Valuation Agent:</strong> Projects Year 1-5 Free Cash Flows and discounts them under a calculated cost of capital (WACC) to solve for intrinsic fair stock price and target gap ratio.
+                  </li>
+                  <li>
+                    <strong>News Agent:</strong> Crawls headlines and computes market news sentiment using a local financial lexicon NLP engine (minimizing LLM latency).
                   </li>
                   <li>
                     <strong>RAG Retrieval Node:</strong> Performs semantic search lookups against vector indexes stored in Chroma Cloud. It pulls details about legal proceedings, debt covenants, and geographic segment performance.
@@ -755,7 +817,10 @@ export default function HomePage() {
                     <strong>Risk Agent:</strong> Synthesizes data to assess systemic business, industry, and credit risks, compiling comprehensive bull-case and bear-case scenarios.
                   </li>
                   <li>
-                    <strong>Decision Agent:</strong> Merges all agent outputs, determines the final recommendation (INVEST or PASS), assigns a confidence score, and establishes a 12-month target price.
+                    <strong>Decision Agent:</strong> Merges all agent outputs, determines the final recommendation (INVEST or PASS), and streams decision tokens live inside the reasoning console.
+                  </li>
+                  <li>
+                    <strong>Self-RAG Audit Agent:</strong> Verifies the draft report's facts and numbers. If discrepancies are found, it routes execution back to the Decision Agent with audit feedback notes (up to 2 retries).
                   </li>
                 </ol>
               </div>
@@ -766,13 +831,16 @@ export default function HomePage() {
                 <h3 className="font-semibold text-gray-900 mb-2">3. Viewing and Exporting Results</h3>
                 <ul className="list-disc pl-5 space-y-2">
                   <li>
-                    <strong>Dashboard:</strong> After compilation, the application redirects to the Results Dashboard. Browse the structured tabs (Overview, Sentiment, Financials, Risks, RAG, and Trend) to audit the agents' reasoning.
+                    <strong>Ticker Directory:</strong> Click the tag icon floating in the bottom-left corner to look up popular stock symbols and select one to instantly load it into the search input.
+                  </li>
+                  <li>
+                    <strong>Dashboard:</strong> Browse the structured tabs: Overview, Sentiment, Financials, Valuation (including the WACC vs. Growth Sensitivity Matrix), Risks, RAG, and Trend.
                   </li>
                   <li>
                     <strong>RAG Quality Auditor:</strong> Look at the color-coded RAG badge on the top right of the result page to verify how many vector chunks, tables, and footnotes were retrieved from the SEC filings.
                   </li>
                   <li>
-                    <strong>Exporting reports:</strong> Click the <strong>Export PDF</strong> button at the top of the dashboard. This generates a styled investment memo and launches the system printer dialog to save it directly to your device.
+                    <strong>Exporting reports:</strong> Click the <strong>Export PDF</strong> button at the top of the dashboard. This generates a styled investment memo containing all valuation metrics and launches the system printer dialog.
                   </li>
                 </ul>
               </div>
