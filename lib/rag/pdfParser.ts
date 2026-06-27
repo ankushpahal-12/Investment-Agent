@@ -12,21 +12,52 @@ export interface SegmentedChunk {
     }
 }
 
-/**
- * Standard utility to split long text into smaller overlapping chunks
- */
 function chunkText(text: string, chunkSize = 800, overlap = 150): string[] {
-    const chunks: string[] = []
-    let start = 0
-    while (start < text.length) {
-        chunks.push(text.slice(start, start + chunkSize))
-        start += chunkSize - overlap
-        if (start + chunkSize >= text.length && start < text.length) {
-            chunks.push(text.slice(start))
-            break
+    const paragraphs = text.split(/\n\s*\n+/);
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    for (const paragraph of paragraphs) {
+        const trimmedPara = paragraph.trim();
+        if (!trimmedPara) continue;
+
+        // If paragraph fits in current chunk, add it
+        if ((currentChunk + (currentChunk ? '\n\n' : '') + trimmedPara).length <= chunkSize) {
+            currentChunk += (currentChunk ? '\n\n' : '') + trimmedPara;
+        } else {
+            // Push current chunk if not empty and restart
+            if (currentChunk) {
+                chunks.push(currentChunk);
+                currentChunk = '';
+            }
+
+            // If a single paragraph exceeds the chunk size, split by sentences
+            if (trimmedPara.length > chunkSize) {
+                const sentences = trimmedPara.split(/(?<=\. )/g);
+                for (const sentence of sentences) {
+                    const trimmedSent = sentence.trim();
+                    if (!trimmedSent) continue;
+
+                    if ((currentChunk + (currentChunk ? ' ' : '') + trimmedSent).length <= chunkSize) {
+                        currentChunk += (currentChunk ? ' ' : '') + trimmedSent;
+                    } else {
+                        if (currentChunk) {
+                            chunks.push(currentChunk);
+                        }
+                        currentChunk = trimmedSent;
+                    }
+                }
+            } else {
+                currentChunk = trimmedPara;
+            }
         }
     }
-    return chunks.filter(c => c.trim().length > 40)
+
+    if (currentChunk) {
+        chunks.push(currentChunk);
+    }
+
+    return chunks.filter(c => c.trim().length > 40);
 }
 
 /**

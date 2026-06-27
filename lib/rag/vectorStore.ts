@@ -283,7 +283,36 @@ async function saveChunksToMongo(
     }
 }
 
+export function reciprocalRankFusion(
+    vectorRanked: { content: string }[],
+    keywordRanked: { content: string }[],
+    k = 5
+): string[] {
+    const rrfScores = new Map<string, number>()
+    
+    // Add vector ranks
+    vectorRanked.forEach((item, index) => {
+        const score = 1 / (60 + index)
+        rrfScores.set(item.content, (rrfScores.get(item.content) ?? 0) + score)
+    })
+
+    // Add keyword ranks
+    keywordRanked.forEach((item, index) => {
+        const score = 1 / (60 + index)
+        rrfScores.set(item.content, (rrfScores.get(item.content) ?? 0) + score)
+    })
+
+    // Sort by final score
+    const sorted = Array.from(rrfScores.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, k)
+        .map(entry => entry[0])
+
+    return sorted
+}
+
 async function queryChunksFromMongo(
+    query: string,
     queryEmbedding: number[],
     company: string,
     k = 5
@@ -296,15 +325,40 @@ async function queryChunksFromMongo(
         const docs = await col.find({ company: { $regex: new RegExp(`^${company}$`, 'i') } }).toArray()
         if (docs.length === 0) return ''
 
-        // Rank by local vector similarity on Gemini embeddings
-        const scored = docs.map(doc => ({
-            content: doc.content,
-            score: cosineSimilarityVectors(queryEmbedding, doc.embedding ?? [])
-        }))
+        // 1. Vector ranking
+        const vectorRanked = docs
+            .map(doc => ({
+                content: doc.content,
+                score: cosineSimilarityVectors(queryEmbedding, doc.embedding ?? [])
+            }))
+            .sort((a, b) => b.score - a.score)
 
-        scored.sort((a, b) => b.score - a.score)
-        const topDocs = scored.slice(0, k).map(s => s.content)
-        return topDocs.join('\n\n---\n\n')
+        // 2. Keyword ranking
+        const stopwords = new Set(['the', 'is', 'at', 'which', 'on', 'and', 'a', 'an', 'to', 'in', 'for', 'of', 'with', 'by']);
+        const queryTokens = new Set(
+            query.toLowerCase()
+                .split(/\W+/)
+                .filter(w => w.length > 2 && !stopwords.has(w))
+        )
+        const keywordRanked = docs
+            .map(doc => {
+                let score = 0
+                const textLower = doc.content.toLowerCase()
+                queryTokens.forEach(token => {
+                    const escaped = token.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+                    const matches = textLower.match(new RegExp('\\b' + escaped + '\\b', 'g'))
+                    if (matches) {
+                        score += matches.length
+                    }
+                })
+                return { content: doc.content, score }
+            })
+            .filter(x => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+
+        // 3. Blend with RRF
+        const blended = reciprocalRankFusion(vectorRanked, keywordRanked, k)
+        return blended.join('\n\n---\n\n')
     } catch (err) {
         console.error('Failed to query RAG chunks from MongoDB:', err)
         return ''
@@ -314,17 +368,51 @@ async function queryChunksFromMongo(
 // ─── Chunk text ───────────────────────────────────────────────────────────────
 
 function chunkText(text: string, chunkSize = 500, overlap = 100): string[] {
-    const chunks: string[] = []
-    let start = 0
-    while (start < text.length) {
-        chunks.push(text.slice(start, start + chunkSize))
-        start += chunkSize - overlap
-        if (start + chunkSize >= text.length && start < text.length) {
-            chunks.push(text.slice(start))
-            break
+    const paragraphs = text.split(/\n\s*\n+/);
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    for (const paragraph of paragraphs) {
+        const trimmedPara = paragraph.trim();
+        if (!trimmedPara) continue;
+
+        // If paragraph fits in current chunk, add it
+        if ((currentChunk + (currentChunk ? '\n\n' : '') + trimmedPara).length <= chunkSize) {
+            currentChunk += (currentChunk ? '\n\n' : '') + trimmedPara;
+        } else {
+            // Push current chunk if not empty and restart
+            if (currentChunk) {
+                chunks.push(currentChunk);
+                currentChunk = '';
+            }
+
+            // If a single paragraph exceeds the chunk size, split by sentences
+            if (trimmedPara.length > chunkSize) {
+                const sentences = trimmedPara.split(/(?<=\. )/g);
+                for (const sentence of sentences) {
+                    const trimmedSent = sentence.trim();
+                    if (!trimmedSent) continue;
+
+                    if ((currentChunk + (currentChunk ? ' ' : '') + trimmedSent).length <= chunkSize) {
+                        currentChunk += (currentChunk ? ' ' : '') + trimmedSent;
+                    } else {
+                        if (currentChunk) {
+                            chunks.push(currentChunk);
+                        }
+                        currentChunk = trimmedSent;
+                    }
+                }
+            } else {
+                currentChunk = trimmedPara;
+            }
         }
     }
-    return chunks.filter(c => c.trim().length > 50)
+
+    if (currentChunk) {
+        chunks.push(currentChunk);
+    }
+
+    return chunks.filter(c => c.trim().length > 50);
 }
 
 // ─── Add documents (batch-optimized) ──────────────────────────────────────────
@@ -424,18 +512,44 @@ export async function retrieveRelevantContext(
         try {
             const results = await collection.query({
                 queryEmbeddings: [queryEmbedding],
-                nResults: k,
+                nResults: k * 3,
                 where: { company },
             })
             const docs = results.documents?.[0] ?? []
             if (docs.length > 0) {
-                const filtered = docs.filter(Boolean) as string[]
+                const vectorRanked = docs.filter(Boolean).map(content => ({ content })) as { content: string }[]
+                
+                // Keyword ranking
+                const stopwords = new Set(['the', 'is', 'at', 'which', 'on', 'and', 'a', 'an', 'to', 'in', 'for', 'of', 'with', 'by']);
+                const queryTokens = new Set(
+                    query.toLowerCase()
+                        .split(/\W+/)
+                        .filter(w => w.length > 2 && !stopwords.has(w))
+                )
+                const keywordRanked = [...vectorRanked]
+                    .map(item => {
+                        let score = 0
+                        const textLower = item.content.toLowerCase()
+                        queryTokens.forEach(token => {
+                            const escaped = token.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+                            const matches = textLower.match(new RegExp('\\b' + escaped + '\\b', 'g'))
+                            if (matches) {
+                                score += matches.length
+                            }
+                        })
+                        return { content: item.content, score }
+                    })
+                    .filter(x => x.score > 0)
+                    .sort((a, b) => b.score - a.score)
+
+                const blended = reciprocalRankFusion(vectorRanked, keywordRanked, k)
+
                 return {
-                    text: filtered.join('\n\n---\n\n'),
-                    chunksRetrieved: filtered.length,
-                    tables: filtered.filter(d => d.startsWith('[TABLE]')).length,
-                    footnotes: filtered.filter(d => d.startsWith('[FOOTNOTE]')).length,
-                    textBlocks: filtered.filter(d => !d.startsWith('[TABLE]') && !d.startsWith('[FOOTNOTE]')).length,
+                    text: blended.join('\n\n---\n\n'),
+                    chunksRetrieved: blended.length,
+                    tables: blended.filter(d => d.startsWith('[TABLE]')).length,
+                    footnotes: blended.filter(d => d.startsWith('[FOOTNOTE]')).length,
+                    textBlocks: blended.filter(d => !d.startsWith('[TABLE]') && !d.startsWith('[FOOTNOTE]')).length,
                     sourcesUsed: 'chromadb',
                 }
             }
@@ -445,7 +559,7 @@ export async function retrieveRelevantContext(
     }
 
     // MongoDB persistent fallback path
-    const mongoResult = await queryChunksFromMongo(queryEmbedding, company, k)
+    const mongoResult = await queryChunksFromMongo(query, queryEmbedding, company, k)
     if (mongoResult) {
         const chunks = mongoResult.split('\n\n---\n\n')
         return {

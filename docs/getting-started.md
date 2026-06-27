@@ -64,8 +64,8 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 ### Detailed Key Descriptions
 
-1. GROQ_API_KEY_RESEARCH, GROQ_API_KEY_FINANCIAL, GROQ_API_KEY_NEWS, GROQ_API_KEY_RISK, GROQ_API_KEY_DECISION:
-   These variables specify the API key used for the respective LLM agent nodes in the LangGraph workflow. Using separate keys allows the application to split its request-per-minute (RPM) and tokens-per-minute (TPM) limits across separate accounts or tokens if hitting rate limits on Groq. If you only have one Groq API key, you can enter the same key for all five parameters.
+1. GROQ_API_KEY_RESEARCH, GROQ_API_KEY_DECISION:
+   These variables specify the API key used for the LLM agent nodes (Research Agent and Decision Agent) in the LangGraph workflow. The Financial, News, and Risk Agents operate deterministically and are LLM-free to ensure high performance, zero rate-limit collisions, and no hallucinations. If you only have one Groq API key, you can use the same key for both parameters.
 
 2. TAVILY_API_KEY:
    Tavily is a search engine optimized for LLMs. The Research Agent queries Tavily to retrieve up-to-date qualitative context regarding a company's background, competitors, and leadership structure.

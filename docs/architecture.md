@@ -68,7 +68,8 @@ StockSage operates on a decoupled architecture where the Next.js API layer orche
     - riskAgent.ts: Outlines micro/macro risks, barriers, bull/bear cases
     - validationAgent.ts: Pre-flight input validation and ticker resolution
   - rag/: Retrieval-Augmented Generation infrastructure
-    - vectorStore.ts: ChromaDB client and local in-memory vector database
+    - pdfParser.ts: Parses and segments document content into tables, footnotes, and text paragraphs
+    - vectorStore.ts: ChromaDB client, local MongoDB backup, and local in-memory vector fallback
   - tools/: SDKs and wrappers for external APIs
     - edgar.ts: SEC EDGAR fetcher and parser
     - finnhub.ts: Finnhub API client

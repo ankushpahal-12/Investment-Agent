@@ -7,6 +7,22 @@ import { ChatGroq } from '@langchain/groq'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { AgentState, Verdict } from '../../types'
 import { retrieveRelevantContext } from '../rag/vectorStore'
+import { z } from 'zod'
+
+const verdictSchema = z.object({
+    decision: z.enum(['INVEST', 'PASS']).describe('Final investment decision.'),
+    confidence: z.number().min(0).max(100).describe('Confidence score from 0 to 100.'),
+    horizon: z.string().describe('Investment time horizon (e.g. short-term, medium-term, long-term or N/A).'),
+    targetPrice: z.string().describe('Estimated target price with currency or N/A.'),
+    reasoning: z.string().describe('Detailed reasoning citing specific metrics/facts, including SEC details if available.'),
+    bullCase: z.string().describe('Best case scenario.'),
+    bearCase: z.string().describe('Worst case scenario.'),
+    keyMetrics: z.array(z.string()).describe('List of key metrics that drove the decision.'),
+    watchlist: z.array(z.string()).describe('List of watchlist items.'),
+    alternativePick: z.string().nullable().describe('Better alternative if PASS, or null if INVEST.'),
+    analystRating: z.enum(['STRONG BUY', 'BUY', 'HOLD', 'SELL', 'STRONG SELL']).describe('Overall analyst recommendation.'),
+    disclaimer: z.string().describe('Standard AI disclaimer.')
+})
 
 // ─── LLM (Decision Agent only) ────────────────────────────────────────────────
 
@@ -47,18 +63,16 @@ export async function decisionAgent(
             technologyRisk?: string[]
         }
 
-        // ── Retrieve RAG context ──────────────────────────────────────────────
-        const ragQuery = `${state.company} investment analysis financial performance risks opportunities`
-        const ragContext = await retrieveRelevantContext(ragQuery, state.company, 5)
+        const ragContext = state.ragContext ?? ''
 
         // ── THE ONLY LLM CALL IN THE ENTIRE PIPELINE ─────────────────────────
-        const response = await llm.invoke([
+        const structuredModel = llm.withStructuredOutput(verdictSchema)
+        const data = await structuredModel.invoke([
             new SystemMessage(`
 You are a senior portfolio manager at a top investment firm with 20 years of experience.
 You make final investment decisions based on structured data from multiple specialized agents.
 Your decision must be evidence-based, realistic, and honest.
 You are not always bullish — you say PASS when the data supports it.
-Respond in valid JSON only — no markdown, no extra text, no commentary.
 `),
             new HumanMessage(`
 Company: ${state.company}
@@ -121,34 +135,8 @@ tables, or legal disclosures), pay special attention to:
 Cite specific SEC filing details in your reasoning when available.
 
 Based on ALL the above structured data, make a final investment decision.
-Return this EXACT JSON (no other text):
-{
-  "decision":        "INVEST" or "PASS",
-  "confidence":      number 0-100,
-  "horizon":         "short-term (0-6 months)" or "medium-term (6-18 months)" or "long-term (2-5 years)",
-  "targetPrice":     "estimated target price with currency e.g. $210 or N/A",
-  "reasoning":       "3-4 sentence detailed reasoning citing specific data points from the above including SEC filing footnotes if available",
-  "bullCase":        "1 sentence best case scenario",
-  "bearCase":        "1 sentence worst case scenario",
-  "keyMetrics":      ["3 most important metrics that drove this decision"],
-  "watchlist":       ["2-3 things to monitor going forward"],
-  "alternativePick": "name of a better alternative company if PASS, or null if INVEST",
-  "analystRating":   "STRONG BUY" or "BUY" or "HOLD" or "SELL" or "STRONG SELL",
-  "disclaimer":      "This is AI-generated analysis for educational purposes only. Not financial advice."
-}
-
-Confidence scoring:
-90-100 = Extremely confident, very strong data alignment
-70-89  = Confident, good data with minor gaps
-50-69  = Moderate confidence, mixed signals
-30-49  = Low confidence, significant uncertainty
-0-29   = Very low, insufficient data
-`),
-        ])
-
-        const text = response.content.toString().trim()
-        const clean = text.replace(/```json|```/g, '').trim()
-        const data = JSON.parse(clean) as Verdict
+`)
+        ]) as Verdict
 
         console.log(`Decision Agent done — ${data.decision} (${data.confidence}% confidence) | ${data.analystRating}`)
 

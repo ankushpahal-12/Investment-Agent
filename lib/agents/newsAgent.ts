@@ -1,7 +1,7 @@
 // lib/agents/newsAgent.ts
 // ─── News Agent ───────────────────────────────────────────────────────────────
 // Data sources: NewsAPI + Finnhub
-// Pure NLP + rule-based sentiment — NO LLM, NO AI API calls
+
 // Injects news articles into RAG for Decision Agent
 
 import { AgentState, NewsData } from '../../types'

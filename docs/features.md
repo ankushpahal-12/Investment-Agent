@@ -94,3 +94,37 @@ StockSage tracks how an asset's financial outlook, market sentiment, and analyst
   - A visual timeline representing recommendation shifts (e.g. INVEST, then PASS).
   - An interactive confidence bar chart that colors positive verdicts green and pass verdicts red.
   - Snapshot cards comparing key metrics (such as Target Price, Sentiment, and Risk Score) across runs.
+
+---
+
+## 8. Advanced RAG Hybrid Search & Recursive Chunking
+
+To prevent context loss and maximize keyword matching precision in SEC filings, StockSage integrates advanced ingestion and retrieval blending.
+
+### How It Works
+- **Recursive Sentence-Aware Chunking**: Standard text is chunked along paragraph (`\n\n`) and sentence (`. `) boundary split lines rather than dry character cuts. This prevents slicing numbers, debt ratios, or disclosures mid-phrase, keeping context vector-accurate.
+- **Reciprocal Rank Fusion (RRF)**: Merges ranked results from vector cosine similarity (Gemini embeddings) with local token-frequency keyword matching. RRF scoring ($1 / (60 + \text{rank})$) blends semantic queries with keyword hits, optimizing exact matches for tickers, covenants, and dates.
+
+---
+
+## 9. Native Zod Structured Output Validation
+
+To achieve complete execution safety and eliminate syntax or schema errors, StockSage enforces LLM responses structurally at the API layer.
+
+### How It Works
+- Enforces strict Zod schemas (`researchSchema` and `verdictSchema`) for both the Research Agent and the Decision Agent.
+- Uses LangChain's `.withStructuredOutput()` parser to instruct the Groq Llama 3.3 model to respond in conforming JSON structures.
+- Prevents pipeline crashes caused by LLM trailing commas, markdown formatting tags, or cut-offs by guaranteeing type-safety.
+
+---
+
+## 10. Local NLP Sentiment Analyzer
+
+StockSage uses a deterministic, local natural language processing (NLP) sentiment engine to score market news sentiment instantly and reliably.
+
+### How It Works
+- Runs Sentiment Lexicon matching via the `Sentiment` library, enhanced with a custom financial lexicon (`FINANCE_POSITIVE` and `FINANCE_NEGATIVE`).
+- Targets financial market catalyst keywords (e.g., "earnings beat", "rally", "growth" vs. "lawsuit", "downgrade", "probe").
+- Automatically blends headline sentiments and full article content (headlines weighted at 60%, content at 40%) to establish a net score (-100 to +100) and media volume classification.
+- Eliminates LLM news-reading latency and hallucination risks, ensuring deterministic and fast pre-decision sentiment analysis.
+

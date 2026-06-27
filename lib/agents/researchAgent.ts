@@ -15,6 +15,7 @@ import {
 import { searchCompanyOverview } from '../tools/tavilySearch'
 import { ChatGroq } from '@langchain/groq'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+import { z } from 'zod'
 
 const GROQ_API_KEY = (
     process.env.GROQ_API_KEY_RESEARCH ??
@@ -27,6 +28,19 @@ const researchLLM = new ChatGroq({
     model: 'llama-3.3-70b-versatile',
     apiKey: GROQ_API_KEY,
     temperature: 0.1,
+})
+
+const researchSchema = z.object({
+    overview: z.string().describe('A concise 3-4 sentence business overview of the company.'),
+    sector: z.string().describe('The primary sector/industry of the company (e.g., Technology, Financials, Healthcare).'),
+    CEO: z.string().describe('The full name of the current CEO.'),
+    founded: z.string().describe('The founding year (e.g., "1981").'),
+    headquarters: z.string().describe('The headquarters location city and country (e.g., "Bangalore, India").'),
+    products: z.array(z.string()).describe('An array of the main products or services.'),
+    competitors: z.array(z.string()).describe('An array of 3-4 key direct competitors.'),
+    businessModel: z.string().describe('A 1-2 sentence description of how the company generates revenue.'),
+    employeeCount: z.string().describe('The approximate number of employees.'),
+    keyStrengths: z.array(z.string()).describe('An array of 3-4 core strengths or competitive advantages.')
 })
 
 // ─── Wikipedia API ────────────────────────────────────────────────────────────
@@ -152,48 +166,20 @@ Tavily Search Results:
 ${JSON.stringify(searchResults.results || [])}
 `.trim()
 
-                const response = await researchLLM.invoke([
+                const structuredModel = researchLLM.withStructuredOutput(researchSchema)
+                const response = await structuredModel.invoke([
                     new SystemMessage(`
 You are an expert equity research analyst. Your job is to extract accurate corporate information about a company.
-Respond with a valid JSON object matching the ResearchData interface. Do not return any other text, markdown formatting, or comments.
 `),
                     new HumanMessage(`
 Extract the corporate details for the company: "${state.company}" (Ticker: ${ticker}).
-
-Requirements for fields:
-1. "overview": A concise 3-4 sentence business overview.
-2. "sector": The primary sector/industry of the company (e.g., Technology, Financials, Healthcare, Consumer Discretionary).
-3. "CEO": The full name of the current CEO (e.g. Salil Parekh for Infosys, Tim Cook for Apple). Look closely at search results for the current CEO.
-4. "founded": The founding year (e.g. "1981").
-5. "headquarters": The headquarters location city and country (e.g. "Bangalore, India").
-6. "products": An array of the main products/services (e.g. ["Software development", "IT consulting", "Cloud services"]).
-7. "competitors": An array of 3-4 key direct competitors (e.g. ["TCS", "Wipro", "Cognizant", "Accenture"]).
-8. "businessModel": A 1-2 sentence description of how the company generates revenue.
-9. "employeeCount": The approximate number of employees (e.g., "300,000+").
-10. "keyStrengths": An array of 3-4 core strengths/competitive advantages.
-
-Return a valid JSON object of this structure:
-{
-  "overview": string,
-  "sector": string,
-  "CEO": string,
-  "founded": string,
-  "headquarters": string,
-  "products": string[],
-  "competitors": string[],
-  "businessModel": string,
-  "employeeCount": string,
-  "keyStrengths": string[]
-}
 
 Context for extraction:
 ${contextText}
 `)
                 ])
 
-                const text = response.content.toString().trim()
-                const clean = text.replace(/```json|```/g, '').trim()
-                researchData = JSON.parse(clean) as ResearchData
+                researchData = response as ResearchData
 
                 // Verify CEO field is not placeholder, try heuristics if needed
                 if (!researchData.CEO || researchData.CEO.toLowerCase().includes('unknown') || researchData.CEO.toLowerCase().includes('website')) {
