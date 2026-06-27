@@ -1,6 +1,6 @@
 import { StateGraph, Annotation } from '@langchain/langgraph'
 import {
-    AgentState, ResearchData, FinancialData, NewsData, RiskData, Verdict, RAGQualityStats
+    AgentState, ResearchData, FinancialData, NewsData, RiskData, Verdict, RAGQualityStats, ValuationData
 } from '../types'
 import { researchAgent } from './agents/researchAgent'
 import { financialAgent } from './agents/financialAgent'
@@ -8,6 +8,8 @@ import { newsAgent } from './agents/newsAgent'
 import { riskAgent } from './agents/riskAgent'
 import { decisionAgent } from './agents/decisionAgent'
 import { validationAgent } from './agents/validationAgent'
+import { valuationAgent } from './agents/valuationAgent'
+import { auditAgent } from './agents/auditAgent'
 import { retrieveRelevantContext, retrieveSECContext } from './rag/vectorStore'
 
 // ─── State schema ─────────────────────────────────────────────────────────────
@@ -48,6 +50,18 @@ const GraphState = Annotation.Root({
     ragQuality: Annotation<RAGQualityStats | undefined>({
         reducer: (_, y) => y,
         default: () => undefined,
+    }),
+    valuationData: Annotation<ValuationData | undefined>({
+        reducer: (_, y) => y,
+        default: () => undefined,
+    }),
+    auditFeedback: Annotation<string | undefined>({
+        reducer: (_, y) => y,
+        default: () => undefined,
+    }),
+    auditCount: Annotation<number | undefined>({
+        reducer: (x, y) => y ?? x ?? 0,
+        default: () => 0,
     }),
     error: Annotation<string | undefined>({
         reducer: (_, y) => y,
@@ -112,7 +126,7 @@ async function ragNode(state: GraphStateType): Promise<Partial<GraphStateType>> 
 }
 
 // ─── Build graph ──────────────────────────────────────────────────────────────
-// Flow: validation → research → financial → news → rag → risk → decision
+// Flow: validation → research → financial → valuation → news → rag → risk → decision → audit
 
 function buildGraph() {
     const workflow = new StateGraph(GraphState)
@@ -120,10 +134,12 @@ function buildGraph() {
     workflow.addNode('validation', validationNode)
     workflow.addNode('research', researchAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
     workflow.addNode('financial', financialAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
+    workflow.addNode('valuation', valuationAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
     workflow.addNode('news', newsAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
     workflow.addNode('rag', ragNode)
     workflow.addNode('risk', riskAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
     workflow.addNode('decision', decisionAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
+    workflow.addNode('audit', auditAgent as (s: GraphStateType) => Promise<Partial<GraphStateType>>)
 
     const g = workflow as unknown as {
         addEdge: (from: string, to: string) => void
@@ -142,11 +158,20 @@ function buildGraph() {
     })
 
     g.addEdge('research', 'financial')
-    g.addEdge('financial', 'news')
+    g.addEdge('financial', 'valuation')
+    g.addEdge('valuation', 'news')
     g.addEdge('news', 'rag')
     g.addEdge('rag', 'risk')
     g.addEdge('risk', 'decision')
-    g.addEdge('decision', '__end__')
+    g.addEdge('decision', 'audit')
+
+    g.addConditionalEdges('audit', (state: GraphStateType) => {
+        if (state.auditFeedback && (state.auditCount ?? 0) < 2) {
+            console.log(`Self-RAG: Audit failed. Retrying decision agent with feedback (Loop: ${state.auditCount}/2)`)
+            return 'decision'
+        }
+        return '__end__'
+    })
 
     return workflow.compile()
 }
@@ -158,7 +183,7 @@ let compiledGraph: ReturnType<typeof buildGraph> | null = null
 function getGraph() {
     if (!compiledGraph) {
         compiledGraph = buildGraph()
-        console.log('LangGraph compiled — flow: validation → research → financial → news → rag → risk → decision')
+        console.log('LangGraph compiled — flow: validation → research → financial → valuation → news → rag → risk → decision → audit')
     }
     return compiledGraph
 }
@@ -167,7 +192,8 @@ function getGraph() {
 
 export async function runInvestmentAnalysis(
     company: string,
-    onProgress?: (step: string, data?: unknown) => void
+    onProgress?: (step: string, data?: unknown) => void,
+    onToken?: (token: string) => void
 ): Promise<AgentState> {
 
     if (!company?.trim()) {
@@ -186,18 +212,24 @@ export async function runInvestmentAnalysis(
         ticker: undefined,
         researchData: undefined,
         financialData: undefined,
+        valuationData: undefined,
         newsData: undefined,
         riskData: undefined,
         verdict: undefined,
         ragContext: undefined,
         ragQuality: undefined,
+        auditFeedback: undefined,
+        auditCount: 0,
         error: undefined,
     }
 
     let finalState: AgentState = { company: companyClean }
 
     try {
-        const stream = await graph.stream(initialState, { streamMode: 'updates' })
+        const stream = await graph.stream(initialState, {
+            streamMode: 'updates',
+            configurable: { onToken }
+        })
 
         for await (const update of stream) {
             const updateRecord = update as Record<string, Partial<AgentState>>

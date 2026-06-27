@@ -14,6 +14,7 @@ export interface ReportDocument {
     financialData: object
     newsData: object
     riskData: object
+    valuationData?: object
     reasoning: string
     error?: string
     ragContext?: string

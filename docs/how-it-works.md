@@ -18,11 +18,13 @@ The graph executes sequentially through the following nodes:
    - If the validation agent determines the company is not found or is invalid, it writes an error message to the state and redirects the execution directly to the __end__ node, aborting the rest of the research pipeline.
    - If validation is successful and resolves the name to a stock ticker, the graph continues to the Research Agent.
 4. Research Agent: Runs web searches and gathers basic company profiles, then continues to the Financial Agent.
-5. Financial Agent: Gathers and computes financial ratios, margins, and operating numbers, then continues to the News Agent.
-6. News Agent: Extracts global news articles and calculates sentiment indicators, then continues to the RAG Node.
-7. RAG Node: Performs semantic vector searches against company profiles and ingested SEC filings, then continues to the Risk Agent.
-8. Risk Agent: Identifies potential bear risks and forms bull/bear scenarios, then continues to the Decision Agent.
-9. Decision Agent: Analyzes all accumulated information, issues the final BUY/PASS recommendation, and completes the execution at the __end__ node.
+5. Financial Agent: Gathers and computes financial ratios, margins, and operating numbers, then continues to the Valuation Agent.
+6. Valuation Agent: Performs DCF (Discounted Cash Flow) WACC projections and intrinsic share price calculations, then continues to the News Agent.
+7. News Agent: Extracts global news articles and calculates sentiment indicators, then continues to the RAG Node.
+8. RAG Node: Performs semantic vector searches against company profiles and ingested SEC filings, then continues to the Risk Agent.
+9. Risk Agent: Identifies potential bear risks and forms bull/bear scenarios, then continues to the Decision Agent.
+10. Decision Agent: Consolidates all data, processes tokens in real-time SSE stream, issues recommendations, and continues to the Audit Agent.
+11. Audit Agent (Conditional Loop): Compliance audits numbers and facts. If inconsistencies or hallucinations are found, increments the loop count and routes execution back to the Decision Agent (max 2 loops) with correction feedback. Otherwise, finishes at the __end__ node.
 
 ### State Management (GraphState)
 
@@ -37,6 +39,9 @@ The centralized state acts as the shared memory across the entire run. It accumu
 - verdict: Verdict object. Final decision recommendation.
 - ragContext: string. Raw context loaded from Vector DB.
 - ragQuality: RAGQualityStats object. Quality metrics of RAG retrieval.
+- valuationData: ValuationData object. Projected rates, calculations, intrinsic price.
+- auditFeedback: string. Real-time compliance correction instructions.
+- auditCount: number. Self-correction loop cycles counter.
 - error: string. Pipeline error message if aborted.
 
 ---
@@ -67,13 +72,19 @@ Each node in the graph is a specialized assistant utilizing a tailored system pr
 - Model: None (Pure deterministic calculation and rule-based parsing for speed and zero hallucination risk).
 - Output: Analyzes operating margins, revenue growth, debt-to-equity ratios, free cash flow trends, and valuation metrics (P/E, EV/EBITDA).
 
-### 4. News Agent (newsAgent.ts)
+### 4. Valuation Agent (valuationAgent.ts)
+- Objective: Computes the asset's fair intrinsic share value using WACC discount rates.
+- Data Sources: Finnhub, financial statements, and vector-retrieved filing cash flow sections.
+- Model: llama-3.3-70b-versatile (using `advancedLLM` with **Zod Structured Schema**) + Deterministic TS Calculation.
+- Output: Resolves base cash flows, cost of capital, growth margins, net debt, and outstanding shares, returning intrinsic share price and target gap ratio.
+
+### 5. News Agent (newsAgent.ts)
 - Objective: Gathers current market sentiment and news coverage.
 - Data Sources: NewsAPI + Finnhub News (retrieves articles from the last 7 days).
 - Model: **Local NLP Text Analysis Engine** (Uses `Sentiment` library with custom financial dictionaries containing positive/negative market indicators like "beat", "rally", "lawsuit", "downgrade", etc.).
 - Output: Computes overall news sentiment score (-100 to +100), extracts positive/negative signals, and details media attention.
 
-### 5. RAG Node (ragNode in graph.ts)
+### 6. RAG Node (ragNode in graph.ts)
 - Objective: Performs semantic vector searches over indexed filings to inject institutional-grade context.
 - Data Sources: ChromaDB or local MongoDB chunk replica.
 - Workflow:
@@ -81,17 +92,23 @@ Each node in the graph is a specialized assistant utilizing a tailored system pr
   - Retrieves candidate chunks and processes them via **Reciprocal Rank Fusion (RRF)** to combine vector search and keyword match ranking.
   - Computes RAG Quality metrics and updates the state with the contextual text block.
 
-### 6. Risk Agent (riskAgent.ts)
+### 7. Risk Agent (riskAgent.ts)
 - Objective: Plays devil's advocate to identify operational bottlenecks and bearish forces.
 - Data Sources: Financial data, news summaries, and retrieved RAG context.
 - Model: None (Pure rule-based scoring derived from leverage, profit margins, sector vectors, and news sentiment).
 - Output: Formulates bull-case and bear-case scenarios, rates systemic credit/market risks, and highlights key competitive threats.
 
-### 7. Decision Agent (decisionAgent.ts)
+### 8. Decision Agent (decisionAgent.ts)
 - Objective: Consolidates all collected evidence and drafts the final investment report.
 - Data Sources: Accumulated state (Research + Financial + News + RAG + Risk).
-- Model: llama-3.3-70b-versatile (Groq) with **Zod Structured Output Schema**
+- Model: llama-3.3-70b-versatile (Groq) with **Zod Structured Output Schema** (streaming tokens directly via SSE).
 - Output: Renders the final recommendation (INVEST or PASS) and rating (BUY, HOLD, SELL) in a strict JSON format verified at the API level, ensuring no parse errors or formatting halts.
+
+### 9. Self-RAG Audit Agent (auditAgent.ts)
+- Objective: Fact-checks draft reports against financials and parsed filings chunks to enforce factual consistency.
+- Data Sources: Centralized state (verdict reasoning, RAG context, financial metrics).
+- Model: llama-3.3-70b-versatile (using `advancedLLM` with **Zod Structured Schema**).
+- Output: Structured check list with boolean verifications and a feedback correction note if validation fails.
 
 ---
 

@@ -22,10 +22,27 @@ if (!process.env.GROQ_API_KEY_DECISION && !process.env.GROQ_API_KEY_RESEARCH) {
     console.warn('⚠️  No Groq API key found. Add GROQ_API_KEY_DECISION to your .env file.')
 }
 
-// ─── Decision LLM (the ONLY LLM in the system) ────────────────────────────────
+function getAdvancedKey(): string {
+    return (
+        process.env.GROQ_API_KEY_ADVANCED ??
+        getDecisionKey()
+    )
+}
+
+// ─── Decision LLM (with streaming enabled) ───────────────────────────────────
 
 export const decisionLLM = new ChatGroq({
     model: 'llama-3.3-70b-versatile',
     apiKey: getDecisionKey(),
     temperature: 0.2,
+    streaming: true,
+})
+
+// ─── Advanced LLM (for DCF, Audit, and Chat-with-Filings) ────────────────────
+
+export const advancedLLM = new ChatGroq({
+    model: 'llama-3.3-70b-versatile',
+    apiKey: getAdvancedKey(),
+    temperature: 0.1,
+    streaming: true,
 })

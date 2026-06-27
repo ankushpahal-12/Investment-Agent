@@ -90,6 +90,17 @@ export interface Verdict {
     disclaimer: string
 }
 
+export interface ValuationData {
+    intrinsicValue: number
+    currentPrice: number
+    valuationGapPct: number
+    wacc: number
+    revenueGrowthRate: number
+    terminalGrowthRate: number
+    assumptions: string
+    formulaApplied: string
+}
+
 export interface AgentState {
     company: string
     ticker?: string          // resolved stock ticker (set by Research Agent)
@@ -97,9 +108,12 @@ export interface AgentState {
     financialData?: FinancialData
     newsData?: NewsData
     riskData?: RiskData
+    valuationData?: ValuationData // DCF valuation model output
     verdict?: Verdict
     ragContext?: string       // retrieved RAG context (set by RAG node)
     ragQuality?: RAGQualityStats  // quality metrics for retrieved context
+    auditFeedback?: string    // feedback notes for Self-RAG loop
+    auditCount?: number       // self-correction loop counter
     error?: string
 }
 

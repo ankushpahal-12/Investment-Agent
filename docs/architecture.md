@@ -30,7 +30,7 @@ StockSage operates on a decoupled architecture where the Next.js API layer orche
    The API route handler initializes the input, constructs the initial state schema, and runs the compiled LangGraph workflow. As the graph executes, the route handler intercepts progress callbacks from the active nodes and streams them back to the client interface in real-time.
 
 3. Multi-Agent Pipeline Layer:
-   The orchestration layer compiles nodes and conditional edges. The request passes through the Validation Agent, Research Agent, Financial Agent, News Agent, RAG Context Node, Risk Agent, and the Decision Agent in sequence.
+   The orchestration layer compiles nodes and conditional edges. The request passes through the Validation Agent, Research Agent, Financial Agent, Valuation Agent, News Agent, RAG Context Node, Risk Agent, Decision Agent, and the Self-RAG Audit Agent in sequence (with conditional loops back to Decision Agent if the compliance audit fails).
 
 4. External Integrations Layer:
    Agents connect to global APIs to gather raw input. The Validation, Research, and Financial agents query Finnhub. The Research Agent queries Wikipedia and Tavily. The News Agent retrieves articles via NewsAPI.
@@ -61,12 +61,14 @@ StockSage operates on a decoupled architecture where the Next.js API layer orche
 - docs/: Platform Documentation
 - lib/: Core Domain Logic and Agents
   - agents/: LangGraph Agent nodes
-    - decisionAgent.ts: Consolidates all data into a final recommendation
-    - financialAgent.ts: Extracts and analyzes balance sheets, margins, valuation
-    - newsAgent.ts: Analyzes news sentiment and recent market developments
+    - auditAgent.ts: Audits final report drafts to check factual consistency (Self-RAG)
+    - decisionAgent.ts: Consolidates all data into a final recommendation (with SSE token streaming)
+    - financialAgent.ts: Extracts and analyzes balance sheets, operating margins
+    - newsAgent.ts: Analyzes news sentiment using a local NLP engine
     - researchAgent.ts: Extracts core company profile, products, competitors
     - riskAgent.ts: Outlines micro/macro risks, barriers, bull/bear cases
     - validationAgent.ts: Pre-flight input validation and ticker resolution
+    - valuationAgent.ts: Projects financial estimates to build a deterministic DCF model
   - rag/: Retrieval-Augmented Generation infrastructure
     - pdfParser.ts: Parses and segments document content into tables, footnotes, and text paragraphs
     - vectorStore.ts: ChromaDB client, local MongoDB backup, and local in-memory vector fallback

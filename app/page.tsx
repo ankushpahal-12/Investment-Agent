@@ -24,12 +24,15 @@ interface AgentFinding {
 // ─── Agent steps ──────────────────────────────────────────────────────────────
 
 const AGENT_STEPS = [
-  { key: 'validation', label: 'Validation agent', desc: 'Verifying company name & resolving ticker' },
-  { key: 'research', label: 'Research agent', desc: 'Company overview, sector, leadership' },
-  { key: 'financial', label: 'Financial agent', desc: 'Share price, market cap, financials' },
-  { key: 'news', label: 'News agent', desc: 'Recent headlines and sentiment analysis' },
-  { key: 'risk', label: 'Risk agent', desc: 'Risks, opportunities, moat analysis' },
-  { key: 'decision', label: 'Decision agent', desc: 'Final INVEST / PASS verdict' },
+  { key: 'validation', label: 'Validation Agent', desc: 'Verifying company name & resolving ticker' },
+  { key: 'research', label: 'Research Agent', desc: 'Company overview, sector, leadership' },
+  { key: 'financial', label: 'Financial Agent', desc: 'Share price, market cap, financials' },
+  { key: 'valuation', label: 'Valuation Agent', desc: 'Running WACC & DCF cash flow projections' },
+  { key: 'news', label: 'News Agent', desc: 'Recent headlines and sentiment analysis' },
+  { key: 'rag', label: 'RAG Retrieval Node', desc: 'Retrieving filings context from Vector DB' },
+  { key: 'risk', label: 'Risk Agent', desc: 'Risks, opportunities, moat analysis' },
+  { key: 'decision', label: 'Decision Agent', desc: 'Final INVEST / PASS verdict' },
+  { key: 'audit', label: 'Self-RAG Audit Agent', desc: 'Checking reasoning facts & figures for compliance' },
 ]
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
@@ -72,11 +75,23 @@ function buildFinding(node: string, data: Record<string, unknown>): string {
         ? `${f.ticker ?? 'N/A'} · ${f.currentPrice ?? 'N/A'} · Market cap: ${f.marketCap ?? 'N/A'} · P/E: ${f.peRatio ?? 'N/A'}`
         : 'Financial data fetched'
     }
+    case 'valuation': {
+      const v = data.valuationData as Record<string, unknown> | undefined
+      return v
+        ? `Intrinsic Value: $${v.intrinsicValue ?? 0} (WACC: ${v.wacc ?? 0}%, Gap: ${v.valuationGapPct ?? 0}%)`
+        : 'Valuation calculated'
+    }
     case 'news': {
       const n = data.newsData as Record<string, unknown> | undefined
       return n
         ? `Sentiment: ${n.sentiment ?? 'N/A'} (${n.sentimentScore ?? 0}/100)`
         : 'News analyzed'
+    }
+    case 'rag': {
+      const q = data.ragQuality as Record<string, unknown> | undefined
+      return q
+        ? `Retrieved ${q.totalChunks ?? 0} chunks (${q.tables ?? 0} tables, ${q.footnotes ?? 0} footnotes)`
+        : 'RAG filings context loaded'
     }
     case 'risk': {
       const r = data.riskData as Record<string, unknown> | undefined
@@ -89,6 +104,13 @@ function buildFinding(node: string, data: Record<string, unknown>): string {
       return v
         ? `${v.decision ?? 'N/A'} · ${v.confidence ?? 0}% confidence · ${v.analystRating ?? 'N/A'}`
         : 'Decision made'
+    }
+    case 'audit': {
+      const feedback = data.auditFeedback as string | undefined
+      const count = data.auditCount as number | undefined
+      return feedback
+        ? `Audit failed: ${feedback.slice(0, 50)}... Retrying (Loop: ${count ?? 1}/2)`
+        : 'Factual audit passed'
     }
     default: return 'Complete'
   }
@@ -105,6 +127,7 @@ export default function HomePage() {
   const [currentStep, setCurrentStep] = useState<string | null>(null)
   const [liveFindings, setLiveFindings] = useState<Record<string, string>>({})
   const [stepTimings, setStepTimings] = useState<Record<string, number>>({})
+  const [decisionTokens, setDecisionTokens] = useState('')
   const [error, setError] = useState('')
   const [recent, setRecent] = useState<RecentReport[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -152,6 +175,7 @@ export default function HomePage() {
     setCurrentStep(null)
     setLiveFindings({})
     setStepTimings({})
+    setDecisionTokens('')
 
     const stepStartTime: Record<string, number> = {}
 
@@ -241,6 +265,11 @@ export default function HomePage() {
                 await new Promise(r => setTimeout(r, 800))
                 router.push(`/results/${encodeURIComponent(payload.company)}`)
                 return
+              }
+
+              if (eventName === 'token') {
+                const tokenPayload = payload as { token: string }
+                setDecisionTokens(prev => prev + tokenPayload.token)
               }
 
               if (eventName === 'error') {
@@ -533,6 +562,17 @@ export default function HomePage() {
                 {completedSteps.length}/{AGENT_STEPS.length} complete · {getProgress()}%
               </p>
             </div>
+
+            {/* SSE Token reasoning stream */}
+            {decisionTokens && (
+              <div className="mt-5 p-4 bg-gray-950 text-emerald-400 rounded-lg font-mono text-xs max-h-48 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="text-gray-500 mb-1 border-b border-gray-800 pb-1 flex items-center justify-between select-none">
+                  <span>⚡ Portfolio Manager Reasoning Stream:</span>
+                  <span className="animate-pulse px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/25">streaming</span>
+                </div>
+                {decisionTokens}
+              </div>
+            )}
           </div>
         )}
 

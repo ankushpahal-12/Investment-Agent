@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
                                 financial: cached.financialData ?? cached.financial,
                                 news: cached.newsData ?? cached.news,
                                 risk: cached.riskData ?? cached.risk,
+                                valuation: cached.valuationData ?? null,
                                 error: cached.error ?? null,
                                 ragContext: cached.ragContext ?? null,
                                 ragQuality: cached.ragQuality ?? null,
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
                                 financial: cached.financialData ?? cached.financial,
                                 news: cached.newsData ?? cached.news,
                                 risk: cached.riskData ?? cached.risk,
+                                valuation: cached.valuationData ?? null,
                                 error: cached.error ?? null,
                                 ragContext: cached.ragContext ?? null,
                                 ragQuality: cached.ragQuality ?? null,
@@ -111,6 +113,9 @@ export async function POST(req: NextRequest) {
                             data: nodeData,
                             message: `${nodeName} agent completed`,
                         })
+                    },
+                    (token) => {
+                        send('token', { token })
                     }
                 )
 
@@ -126,6 +131,7 @@ export async function POST(req: NextRequest) {
                         financialData: result.financialData ?? {},
                         newsData: result.newsData ?? {},
                         riskData: result.riskData ?? {},
+                        valuationData: result.valuationData ?? {},
                         reasoning: result.verdict?.reasoning ?? '',
                         error: result.error,
                         ragContext: result.ragContext,
@@ -148,6 +154,7 @@ export async function POST(req: NextRequest) {
                     financial: result.financialData,
                     news: result.newsData,
                     risk: result.riskData,
+                    valuation: result.valuationData,
                     error: result.error ?? null,
                     ragContext: result.ragContext ?? null,
                     ragQuality: result.ragQuality ?? null,

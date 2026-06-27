@@ -8,6 +8,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { AgentState, Verdict } from '../../types'
 import { retrieveRelevantContext } from '../rag/vectorStore'
 import { z } from 'zod'
+import { RunnableConfig } from '@langchain/core/runnables'
 
 const verdictSchema = z.object({
     decision: z.enum(['INVEST', 'PASS']).describe('Final investment decision.'),
@@ -46,7 +47,8 @@ const llm = new ChatGroq({
 // ─── Main Agent ───────────────────────────────────────────────────────────────
 
 export async function decisionAgent(
-    state: AgentState
+    state: AgentState,
+    config?: RunnableConfig
 ): Promise<Partial<AgentState>> {
 
     console.log(`Decision Agent starting for: ${state.company}`)
@@ -64,8 +66,10 @@ export async function decisionAgent(
         }
 
         const ragContext = state.ragContext ?? ''
+        const auditFeedback = state.auditFeedback
 
         // ── THE ONLY LLM CALL IN THE ENTIRE PIPELINE ─────────────────────────
+        const onToken = config?.configurable?.onToken
         const structuredModel = llm.withStructuredOutput(verdictSchema)
         const data = await structuredModel.invoke([
             new SystemMessage(`
@@ -134,9 +138,21 @@ tables, or legal disclosures), pay special attention to:
   - Management's forward-looking guidance and outlook
 Cite specific SEC filing details in your reasoning when available.
 
+${auditFeedback ? `
+═══ PREVIOUS AUDIT CORRECTION FEEDBACK ═══
+Compliance Audit failed on previous draft. Please correct these factual mismatches in this new draft:
+${auditFeedback}
+` : ''}
+
 Based on ALL the above structured data, make a final investment decision.
 `)
-        ]) as Verdict
+        ], {
+            callbacks: onToken ? [{
+                handleLLMNewToken(token: string) {
+                    onToken(token)
+                }
+            }] : undefined
+        }) as Verdict
 
         console.log(`Decision Agent done — ${data.decision} (${data.confidence}% confidence) | ${data.analystRating}`)
 

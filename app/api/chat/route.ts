@@ -1,20 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getReportByCompany } from '../../../lib/mongodb'
-import { ChatGroq } from '@langchain/groq'
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages'
+import { advancedLLM } from '../../../lib/llm'
+import { retrieveRelevantContext } from '../../../lib/rag/vectorStore'
 
-const GROQ_API_KEY = (
-    process.env.GROQ_API_KEY_DECISION ??
-    process.env.GROQ_API_KEY_RESEARCH ??
-    process.env.GROQ_API_KEY ??
-    ''
-)
-
-const chatLLM = new ChatGroq({
-    model: 'llama-3.3-70b-versatile',
-    apiKey: GROQ_API_KEY,
-    temperature: 0.4,
-})
+const chatLLM = advancedLLM
 
 export async function POST(req: NextRequest) {
     try {
@@ -44,11 +34,28 @@ export async function POST(req: NextRequest) {
         const news = (report.newsData ?? report.news) as any
         const risk = (report.riskData ?? report.risk) as any
 
+        // Dynamic Conversational RAG lookup over Chroma/Mongo chunks matching user's current chat question
+        let chatRagContext = ''
+        try {
+            const ragResult = await retrieveRelevantContext(message, company, 3)
+            if (ragResult.text) {
+                chatRagContext = ragResult.text
+            }
+        } catch (ragErr) {
+            console.warn('Chat RAG context retrieval failed:', ragErr)
+        }
+
         const systemPrompt = `
 You are StockSage Chatbot, an expert financial research assistant.
 You are helping the user with follow-up Q&A regarding the generated investment research report for "${company}".
 Answer questions accurately, clearly, and concisely, referring directly to the structured report data below.
 Do not make up facts. If the information is not in the report or cannot be inferred from it, use your general knowledge but clearly state that it is not explicitly in the generated agent report.
+
+${chatRagContext ? `
+═══ FILING REFERENCE CONTEXT (Retrieved for this Question) ═══
+Below are exact passages retrieved from the company's filings matching the user's question. Cite these details directly in your response if relevant:
+${chatRagContext}
+` : ''}
 
 ═══ INVESTMENT REPORT DATA FOR ${company} ═══
 Ticker: ${financial?.ticker || 'N/A'}

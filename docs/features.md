@@ -128,3 +128,47 @@ StockSage uses a deterministic, local natural language processing (NLP) sentimen
 - Automatically blends headline sentiments and full article content (headlines weighted at 60%, content at 40%) to establish a net score (-100 to +100) and media volume classification.
 - Eliminates LLM news-reading latency and hallucination risks, ensuring deterministic and fast pre-decision sentiment analysis.
 
+---
+
+## 11. Discounted Cash Flow (DCF) Valuation Model
+
+StockSage includes a deterministic Discounted Cash Flow (DCF) mathematical solver that evaluates a company's intrinsic share value compared to its current trading price.
+
+### How It Works
+- **Parameter Projection**: Retrieves capital expenditure, debt, cash, and historical free cash flow data from parsed filing footnotes using RAG.
+- **LLM Estimation**: Employs the compliance-focused `advancedLLM` to estimate reasonable annual growth rates (Years 1-5), the discount rate (WACC), and terminal growth rates.
+- **Deterministic Math Engine**: Automatically projects future cash flows, discounts them, subtracts net debt, and divides by shares outstanding in TypeScript to calculate fair intrinsic value and overvalued/undervalued gaps.
+
+---
+
+## 12. Self-RAG Stateful Auditing (Self-Correction)
+
+To prevent factual hallucinations, StockSage runs a real-time compliance audit loop within the LangGraph orchestrator.
+
+### How It Works
+- **Thesis Auditor**: After the Decision Agent drafts the investment report, the state passes to a dedicated `auditAgent` node.
+- **Fact Verification**: The auditor fact-checks the reasoning claims against the RAG context and database metrics, outputting a structured pass/fail schema.
+- **Feedback Re-routing**: If errors or contradictions are identified, the graph increments the loop counter and re-routes execution back to the Decision Agent, attaching the audit feedback notes for correction.
+
+---
+
+## 13. Real-Time Token Reasoning Streaming
+
+To improve perceived latency and provide an interactive terminal feel, StockSage streams the Portfolio Manager's decision reasoning in real-time.
+
+### How It Works
+- **LangChain Event Streaming**: Hooks into LangChain's `handleLLMNewToken` event streams during Decision Agent runs.
+- **SSE Chunk Emission**: Transmits chunks in real-time through the Server-Sent Events (SSE) `/api/analyze` connection.
+- **Terminal Console**: The client UI displays reasoning text writing itself live in a console-style box below the progress indicator.
+
+---
+
+## 14. Chat-with-Filings Conversational RAG
+
+StockSage upgrades the Q&A chatbot to allow users to ask follow-up questions about the parsed filings database, bypassing static report limits.
+
+### How It Works
+- **Semantic Context Fetch**: On each chat submission, `/api/chat` queries the company's ChromaDB and MongoDB vector index matching the question keywords.
+- **Prompt Injection**: Matches and injects retrieved filings context passages directly into the chatbot's system prompt, allowing accurate, citation-backed follow-up replies.
+
+

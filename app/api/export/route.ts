@@ -33,9 +33,11 @@ export async function GET(req: NextRequest) {
         const financial = (report.financialData ?? report.financial ?? {}) as Record<string, unknown>
         const news = (report.newsData ?? report.news ?? {}) as Record<string, unknown>
         const risk = (report.riskData ?? report.risk ?? {}) as Record<string, unknown>
+        const valuation = (report.valuationData ?? (report as any).valuation ?? {}) as Record<string, unknown>
 
         const isInvest = verdict?.decision === 'INVEST'
         const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
 
         // Generate styled HTML report
         const html = `<!DOCTYPE html>
@@ -140,6 +142,35 @@ export async function GET(req: NextRequest) {
                 <div class="metric"><div class="label">Beta</div><div class="value">${financial.beta ?? 'N/A'}</div></div>
             </div>
         </div>
+
+        <!-- DCF Valuation -->
+        ${valuation && valuation.intrinsicValue ? `
+        <div class="section">
+            <h2>Discounted Cash Flow (DCF) Valuation</h2>
+            <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div class="metric"><div class="label">Intrinsic Value</div><div class="value">$${valuation.intrinsicValue}</div></div>
+                <div class="metric"><div class="label">Current Price</div><div class="value">$${valuation.currentPrice}</div></div>
+                <div class="metric">
+                    <div class="label">Valuation Gap</div>
+                    <div class="value ${Number(valuation.valuationGapPct) > 0 ? 'green' : Number(valuation.valuationGapPct) < 0 ? 'red' : ''}">
+                        ${Number(valuation.valuationGapPct) > 0 ? '+' : ''}${valuation.valuationGapPct}%
+                    </div>
+                </div>
+            </div>
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                <p style="font-size: 10px; color: #6b7280; font-weight: 600; margin-bottom: 4px; text-transform: uppercase;">Model Parameters</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 12px; color: #374151;">
+                    <div><strong>WACC:</strong> ${valuation.wacc}%</div>
+                    <div><strong>Projected Growth:</strong> ${valuation.revenueGrowthRate}%</div>
+                    <div><strong>Terminal Growth:</strong> ${valuation.terminalGrowthRate}%</div>
+                </div>
+            </div>
+            <div>
+                <p style="font-size: 10px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase;">Assumptions & Rationale</p>
+                <p style="font-size: 13px; color: #4b5563; white-space: pre-wrap; font-style: italic;">${valuation.assumptions}</p>
+            </div>
+        </div>
+        ` : ''}
 
         <!-- News Sentiment -->
         <div class="section">

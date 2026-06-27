@@ -82,25 +82,37 @@ interface Verdict {
     disclaimer: string
 }
 
+interface ValuationData {
+    intrinsicValue: number
+    currentPrice: number
+    valuationGapPct: number
+    wacc: number
+    revenueGrowthRate: number
+    terminalGrowthRate: number
+    assumptions: string
+    formulaApplied: string
+}
+
 interface ReportData {
     company: string
-    // API route returns these names
     verdict?: Verdict
     research?: ResearchData
     financial?: FinancialData
     news?: NewsData
     risk?: RiskData
-    // MongoDB might store these names instead
+    valuation?: ValuationData
     researchData?: ResearchData
     financialData?: FinancialData
     newsData?: NewsData
     riskData?: RiskData
+    valuationData?: ValuationData
     data?: {
         verdict?: Verdict
         research?: ResearchData
         financial?: FinancialData
         news?: NewsData
         risk?: RiskData
+        valuation?: ValuationData
     }
     error?: string
     ragContext?: string
@@ -116,7 +128,7 @@ interface ReportData {
 }
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
-const TABS = ['Overview', 'Financials', 'News', 'Risks', 'Decision', 'SEC Sources', 'Trend'] as const
+const TABS = ['Overview', 'Financials', 'Valuation', 'News', 'Risks', 'Decision', 'SEC Sources', 'Trend'] as const
 type Tab = typeof TABS[number]
 
 // ─── Small reusable components ────────────────────────────────────────────────
@@ -243,6 +255,74 @@ function OverviewTab({ research }: { research: ResearchData }) {
                             <Badge key={i} color="gray">{c}</Badge>
                         ))}
                     </div>
+                </div>
+            </SectionCard>
+        </div>
+    )
+}
+
+function ValuationTab({ valuation }: { valuation: ValuationData | undefined }) {
+    if (!valuation || !valuation.intrinsicValue) {
+        return (
+            <div className="bg-white border border-gray-100 rounded-xl p-5 mb-4 text-center">
+                <p className="text-sm text-gray-400">Valuation calculations are not available for this report snapshot.</p>
+            </div>
+        )
+    }
+
+    const isUndervalued = valuation.valuationGapPct > 0
+    const gapColor = isUndervalued ? 'green' : valuation.valuationGapPct < 0 ? 'red' : 'gray'
+    const gapSymbol = isUndervalued ? '+' : ''
+
+    return (
+        <div className="space-y-5 animate-in fade-in duration-300">
+            <SectionCard title="DCF Intrinsic Valuation Model" icon="📊">
+                <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3">
+                    <MetricCard
+                        label="Intrinsic Share Value"
+                        value={`$${valuation.intrinsicValue}`}
+                        highlight={isUndervalued ? 'green' : undefined}
+                    />
+                    <MetricCard
+                        label="Current Trading Price"
+                        value={`$${valuation.currentPrice}`}
+                    />
+                    <MetricCard
+                        label="Valuation Gap"
+                        value={`${gapSymbol}${valuation.valuationGapPct}%`}
+                        sub={isUndervalued ? 'Undervalued' : valuation.valuationGapPct < 0 ? 'Overvalued' : 'Fairly Valued'}
+                        highlight={isUndervalued ? 'green' : valuation.valuationGapPct < 0 ? 'red' : undefined}
+                    />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5 mt-4 pt-4 border-t border-gray-100">
+                    <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Discount Rate (WACC)</p>
+                        <p className="text-xs font-semibold text-gray-800">{valuation.wacc}%</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Projected Growth (Years 1-5)</p>
+                        <p className="text-xs font-semibold text-gray-800">{valuation.revenueGrowthRate}%</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Terminal Growth Rate</p>
+                        <p className="text-xs font-semibold text-gray-800">{valuation.terminalGrowthRate}%</p>
+                    </div>
+                </div>
+            </SectionCard>
+
+            <SectionCard title="Analyst Assumptions & Rationale" icon="📝">
+                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {valuation.assumptions}
+                </p>
+            </SectionCard>
+
+            <SectionCard title="Model Formulas & Mathematical Framework" icon="📐">
+                <div className="p-3 bg-gray-50 text-gray-500 rounded-lg font-mono text-[10px] whitespace-pre-wrap leading-normal">
+                    {valuation.formulaApplied}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-2.5 italic">
+                    Note: Discounted Cash Flow valuation models are projection-based. Estimates rely heavily on management's forward guidance and the analyst's cost of capital assumptions.
                 </div>
             </SectionCard>
         </div>
@@ -850,14 +930,18 @@ export default function ResultsPage() {
     const [reanalyzing, setReanalyzing] = useState(false)
     const [currentStep, setCurrentStep] = useState<string | null>(null)
     const [completedSteps, setCompletedSteps] = useState<string[]>([])
+    const [decisionTokens, setDecisionTokens] = useState('')
 
     const AGENT_STEPS = [
-        { key: 'validation', label: 'Validation agent', desc: 'Verifying company name & ticker' },
-        { key: 'research', label: 'Research agent', desc: 'Company overview, sector, leadership' },
-        { key: 'financial', label: 'Financial agent', desc: 'Share price, market cap, financials' },
-        { key: 'news', label: 'News agent', desc: 'Recent headlines and sentiment analysis' },
-        { key: 'risk', label: 'Risk agent', desc: 'Risks, opportunities, moat analysis' },
-        { key: 'decision', label: 'Decision agent', desc: 'Final INVEST / PASS verdict' },
+        { key: 'validation', label: 'Validation Agent', desc: 'Verifying company name & resolving ticker' },
+        { key: 'research', label: 'Research Agent', desc: 'Company overview, sector, leadership' },
+        { key: 'financial', label: 'Financial Agent', desc: 'Share price, market cap, financials' },
+        { key: 'valuation', label: 'Valuation Agent', desc: 'Running WACC & DCF cash flow projections' },
+        { key: 'news', label: 'News Agent', desc: 'Recent headlines and sentiment analysis' },
+        { key: 'rag', label: 'RAG Retrieval Node', desc: 'Retrieving filings context from Vector DB' },
+        { key: 'risk', label: 'Risk Agent', desc: 'Risks, opportunities, moat analysis' },
+        { key: 'decision', label: 'Decision Agent', desc: 'Final INVEST / PASS verdict' },
+        { key: 'audit', label: 'Self-RAG Audit Agent', desc: 'Checking reasoning facts & figures for compliance' },
     ]
 
     function getStepIndex(key: string) {
@@ -888,6 +972,7 @@ export default function ResultsPage() {
         setReanalyzing(true)
         setCompletedSteps([])
         setCurrentStep(AGENT_STEPS[0].key)
+        setDecisionTokens('')
         setError('')
 
         try {
@@ -942,6 +1027,11 @@ export default function ResultsPage() {
                                 }
                             }
 
+                            if (eventName === 'token') {
+                                const tokenPayload = payload as { token: string }
+                                setDecisionTokens(prev => prev + tokenPayload.token)
+                            }
+
                             if (eventName === 'complete') {
                                 setCompletedSteps(AGENT_STEPS.map(s => s.key))
                                 setCurrentStep(null)
@@ -954,6 +1044,7 @@ export default function ResultsPage() {
                                     financial: payload.financial,
                                     news: payload.news,
                                     risk: payload.risk,
+                                    valuation: payload.valuation,
                                     error: payload.error ?? null,
                                 }
                                 setReport(completeData)
@@ -1230,6 +1321,7 @@ export default function ResultsPage() {
                             <div className="transition-all duration-300">
                                 {activeTab === 'Overview' && <OverviewTab research={research} />}
                                 {activeTab === 'Financials' && <FinancialsTab financial={financial} />}
+                                {activeTab === 'Valuation' && <ValuationTab valuation={report.valuation ?? report.valuationData ?? (report as any).data?.valuation} />}
                                 {activeTab === 'News' && <NewsTab news={news} />}
                                 {activeTab === 'Risks' && <RisksTab risk={risk} />}
                                 {activeTab === 'Decision' && <DecisionTab verdict={verdict} />}
@@ -1301,6 +1393,17 @@ export default function ResultsPage() {
                             <span>{completedSteps.length} of {AGENT_STEPS.length} complete</span>
                             <span>{Math.round((completedSteps.length / AGENT_STEPS.length) * 100)}%</span>
                         </div>
+
+                        {/* SSE Token reasoning stream */}
+                        {decisionTokens && (
+                            <div className="mt-4 p-3 bg-gray-950 text-emerald-400 rounded-lg font-mono text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap border border-gray-800 shadow-inner">
+                                <div className="text-gray-500 mb-1 border-b border-gray-800 pb-0.5 flex items-center justify-between select-none">
+                                    <span>⚡ PM Reasoning Stream:</span>
+                                    <span className="animate-pulse text-[8px] text-emerald-400">streaming</span>
+                                </div>
+                                {decisionTokens}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
