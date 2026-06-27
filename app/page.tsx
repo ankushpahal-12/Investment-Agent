@@ -840,6 +840,9 @@ export default function HomePage() {
                     <strong>RAG Quality Auditor:</strong> Look at the color-coded RAG badge on the top right of the result page to verify how many vector chunks, tables, and footnotes were retrieved from the SEC filings.
                   </li>
                   <li>
+                    <strong>Legacy Reports & Valuation Gaps:</strong> If you see "Valuation calculations are not available for this report snapshot" on the Valuation tab, it means you loaded a cached report created before the Valuation Agent upgrade. Click the <strong>Re-analyze</strong> button in the top-right corner to re-run the full 9-agent pipeline and refresh the report data.
+                  </li>
+                  <li>
                     <strong>Exporting reports:</strong> Click the <strong>Export PDF</strong> button at the top of the dashboard. This generates a styled investment memo containing all valuation metrics and launches the system printer dialog.
                   </li>
                 </ul>

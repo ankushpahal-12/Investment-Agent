@@ -1087,7 +1087,7 @@ export default function ResultsPage() {
             const res = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ company }),
+                body: JSON.stringify({ company, forceRefresh: true }),
             })
 
             if (!res.ok || !res.body) {

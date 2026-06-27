@@ -106,10 +106,16 @@ export function cleanTicker(ticker: string): string {
 // Searches Finnhub for a ticker symbol given a company name
 
 export async function resolveTicker(companyName: string): Promise<string> {
+    const trimmed = companyName.trim()
+    if (/^[A-Z]{1,5}$/.test(trimmed)) {
+        console.log(`resolveTicker: "${trimmed}" is already a ticker symbol. Bypassing search.`)
+        return trimmed
+    }
+
     try {
         const client = getClient()
         const data = await callWithRetry(() => call<{ result: Array<{ symbol: string; description: string; type: string }> }>(
-            (cb) => client.symbolSearch(companyName, {}, cb)
+            (cb) => client.symbolSearch(trimmed, {}, cb)
         ), { maxRetries: 2, baseDelayMs: 500 })
         const results = data?.result ?? []
 
