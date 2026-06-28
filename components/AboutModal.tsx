@@ -66,6 +66,9 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
                 <strong>Financial Agent:</strong> Evaluates fundamental financial metrics, operating ratios, leverage ratios, and growth figures using market APIs.
               </li>
               <li>
+                <strong>Valuation Agent:</strong> Projects financial estimates (free cash flow, net debt, growth, WACC) to construct a deterministic Discounted Cash Flow (DCF) model.
+              </li>
+              <li>
                 <strong>News Agent:</strong> Crawls real-time headlines from the past seven days, scoring net sentiment and identifying key catalyst events.
               </li>
               <li>
@@ -76,6 +79,9 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
               </li>
               <li>
                 <strong>Decision Agent:</strong> Aggregates the graph state and issues a final <strong>INVEST</strong> or <strong>PASS</strong> recommendation, complete with target price, time horizon, and confidence scoring.
+              </li>
+              <li>
+                <strong>Self-RAG Audit Agent:</strong> Audits the final recommendation draft to verify mathematical consistency and check against retrieved SEC filing contexts, looping back to the Decision Agent with feedback if inconsistencies are detected.
               </li>
             </ul>
           </div>

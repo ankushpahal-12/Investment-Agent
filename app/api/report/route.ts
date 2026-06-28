@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
             financial: report.financialData ?? report.financial,
             news: report.newsData ?? report.news,
             risk: report.riskData ?? report.risk,
+            valuation: report.valuationData ?? (report as any).valuation,
             error: report.error ?? null,
             ragContext: report.ragContext ?? null,
             ragQuality: (report as any).ragQuality ?? null,
